@@ -19,13 +19,17 @@
 #                    · 跑完自动清理测试数据。
 #        SMOKE_SWEEP 设为 1 时额外验证 OrderExpiryTask 定时扫描（要等下一次扫描，最长约 90 秒）
 #
-# 覆盖的契约（对应本轮安全加固 + 订单状态机）：
+# 覆盖的契约（对应本轮安全加固 + 订单状态机 + 三种登录方式）：
 #   登录门禁 / 口令强度 / 登录失败锁定 / 注册限频 / 服务端计价 / 幂等重复提交 /
 #   订单归属隔离 / 手机号脱敏 / 批量取消需显式确认 / 改密吊销全部令牌 / CORS 来源白名单；
 #   下单为「待支付」+ 支付窗口 / 支付→已支付 / 已支付只能退款不能取消 / 退款回补库存 /
-#   已取消、已退款可删除 / 待支付、已支付不可删除 / 超时未支付自动取消并回补库存
+#   已取消、已退款可删除 / 待支付、已支付不可删除 / 超时未支付自动取消并回补库存；
+#   手机验证码（发码限流 / 一次性 / 号码唯一归属）/ 手机号注册 /
+#   扫码登录状态机（PENDING→SCANNED→CONFIRMED→只送达一次、取消、过期、确认页不出回环地址）/
+#   7×24 客服规则问答（演示口径、转人工兜底、空消息与限流）
 #
-# 说明：测试账号固定叫 smoke_a / smoke_b / smoke_c（可反复运行；已存在时自动改走登录）。
+# 说明：测试账号固定叫 smoke_a / smoke_b / smoke_c / smoke_sms，手机号一律用 1390000xxxx 号段
+#       （可反复运行；账号已存在时自动改走登录）。
 #       用例结束时订单都已删除或已取消，需要彻底清掉残留请用带上 MYSQL_BIN/MYSQL_PWD 的自动清理。
 # =====================================================================
 set -uo pipefail
@@ -373,7 +377,260 @@ case "$LAST" in
         ;;
 esac
 
-section '13. CORS 来源白名单'
+section '13. 手机验证码登录（发码 / 限流 / 一次性 / 唯一归属）'
+phone_s='13900003333'; PW_SMS='Smoke@2026s'; SMS_OK=0
+# 这个号码只挂 smoke_sms 一个账号：验证码登录要求「号码唯一归属」，
+# 不能借用 smoke_a~c 共用的 13900001111（那正是本节要单独验证的反例）
+json_body "$TMP/reg-sms.json" username smoke_sms password "$PW_SMS" nickname 冒烟短信 phone "$phone_s"
+req POST /api/auth/register "$TMP/reg-sms.json"
+case "$LAST" in
+    *'"code":0'*) ok '为验证码用例注册专用账号 smoke_sms' ;;
+    *'已被注册'*) say '  · smoke_sms 是上次运行留下的，直接复用' ;;
+    *'过于频繁'*) skip '手机验证码用例' '本机这一小时的注册额度已用满（重启后端可清零内存计数）' ;;
+    *) no '注册 smoke_sms' 'code 0 / 已被注册 / 限流' "$LAST" ;;
+esac
+login_as smoke_sms "$PW_SMS"
+if [ -z "$TOKEN" ]; then
+    skip '手机验证码用例' 'smoke_sms 登录不上（多半是这一小时的注册额度用满、账号没建起来），请调大 ctrip.auth.max-register-per-hour 或重启后端再跑'
+else
+    TOK_SMS="$TOKEN"; SMS_OK=1
+    # —— 号码归属：未注册、一号多账号，都在发码这一步就拦下
+    json_body "$TMP/sms-none.json" phone 13900009999
+    req POST /api/auth/sms/send "$TMP/sms-none.json"
+    assert_has '未注册号码不给发码' "$LAST" '未注册'
+    json_body "$TMP/sms-multi.json" phone "$phone_a"
+    req POST /api/auth/sms/send "$TMP/sms-multi.json"
+    assert_has '一号挂多账号时要求改用账号密码登录' "$LAST" '账号密码登录'
+
+    # —— 正常发码
+    json_body "$TMP/sms-send.json" phone "$phone_s"
+    req POST /api/auth/sms/send "$TMP/sms-send.json"
+    CODE=$(f data.demoCode)
+    case "$LAST" in
+        *'"code":0'*)
+            if [ -n "$CODE" ]; then ok '发码成功，演示模式回显了明文码（expose-sms-code=true）'
+            else skip '验证码登录后续用例' '后端已关闭 demoCode 回显，脚本拿不到码值（上线应有的状态）'; fi ;;
+        *'验证码已发送'*) skip '发码' '上一条验证码还在重发冷却里（sms-resend-seconds），等一分钟再跑' ;;
+        *'过于频繁'*)     skip '发码' '该号码这一小时的验证码条数已用满（sms-max-per-hour）' ;;
+        *)                no '发码' 'code 0' "$LAST" ;;
+    esac
+
+    if [ -n "$CODE" ]; then
+        req POST /api/auth/sms/send "$TMP/sms-send.json"
+        assert_has '同一号码冷却期内不允许重发' "$LAST" '验证码已发送'
+        json_body "$TMP/sms-bad.json" phone "$phone_s" code 000000
+        req POST /api/auth/sms/login "$TMP/sms-bad.json"
+        assert_has '错码与过期给同一句提示（不做进度探针）' "$LAST" '验证码不正确或已失效'
+        json_body "$TMP/sms-short.json" phone "$phone_s" code 12345
+        req POST /api/auth/sms/login "$TMP/sms-short.json"
+        assert_has '验证码长度先于校验被钉死' "$LAST" '6位短信验证码'
+
+        json_body "$TMP/sms-ok.json" phone "$phone_s" code "$CODE"
+        req POST /api/auth/sms/login "$TMP/sms-ok.json"
+        assert_eq '验证码登录成功' "$(f code)" '0'
+        req GET /api/auth/me '' "$(f data.token)"
+        assert_has '验证码登录签发的会话与密码登录同构' "$LAST" '"username":"smoke_sms"'
+        req POST /api/auth/sms/login "$TMP/sms-ok.json"
+        assert_has '同一验证码不能复用第二次' "$LAST" '验证码不正确或已失效'
+    fi
+fi
+
+section '14. 手机号注册：验证码直接建号并登录'
+phone_r='13900005555'
+# 注册发码与登录发码是两个场景，规则正好相反：注册只给「未注册」的号码发码。
+# 本节的两条对照都依赖「有个已注册号码」，上一节没建起 smoke_sms 时只能跳过，不该报失败。
+if [ "$SMS_OK" = '1' ]; then
+    json_body "$TMP/reg-code-taken.json" phone "$phone_s"
+    req POST /api/auth/sms/register-code "$TMP/reg-code-taken.json"
+    assert_has '已注册号码拿不到注册码' "$LAST" '该手机号已注册'
+else
+    skip '已注册号码拿不到注册码' 'smoke_sms 本轮没建成，缺少「已注册号码」这个对照'
+fi
+
+# 不带 code 的请求仍然走账号密码注册，不会被手机号分支吞掉
+json_body "$TMP/reg-nocode.json" phone "$phone_r" nickname 冒烟无码
+req POST /api/auth/register "$TMP/reg-nocode.json"
+case "$LAST" in
+    *'过于频繁'*) skip '缺验证码时仍按用户名注册校验' '注册额度用满：一次完整运行要注册 6 个账号，同一小时反复跑请调大 max-register-per-hour 或重启后端' ;;
+    *) assert_has '缺验证码时仍按用户名注册校验' "$LAST" '用户名需 3-20 位' ;;
+esac
+# 带了 code 但码不对：校验先于建号与限流，不消耗注册额度（verifyRegisterCode 查不到记录直接 false）
+json_body "$TMP/reg-badcode.json" phone "$phone_r" code 000000
+req POST /api/auth/register "$TMP/reg-badcode.json"
+assert_has '验证码不正确不能建号' "$LAST" '验证码不正确或已失效'
+
+json_body "$TMP/reg-send.json" phone "$phone_r"
+req POST /api/auth/sms/register-code "$TMP/reg-send.json"
+REG_CODE=$(f data.demoCode)
+case "$LAST" in
+    *'"code":0'*) [ -n "$REG_CODE" ] && ok '未注册号码可拿到注册验证码' ;;
+    *'验证码已发送'*) skip '手机号注册全链路' '上一条注册码还在重发冷却里，等一分钟再跑' ;;
+    *'过于频繁'*)     skip '手机号注册全链路' '发码配额用满（单号码每小时 5 条 / 单 IP 每小时 20 条）' ;;
+    *)                no '注册发码' 'code 0' "$LAST" ;;
+esac
+if [ -n "$REG_CODE" ]; then
+    # 昵称故意填超长（6+60+1 字）：app_user.nickname 是 VARCHAR(50)，
+    # 早先直接建号会撞 MySQL「Data too long」变成 500，现在后端按 50 字截断
+    LONG_NICK="冒烟手机用户$(printf 'A%.0s' {1..60})Z"
+    json_body "$TMP/reg-phone.json" phone "$phone_r" code "$REG_CODE" nickname "$LONG_NICK"
+    req POST /api/auth/register "$TMP/reg-phone.json"
+    if [ "$(f code)" != '0' ]; then
+        case "$LAST" in
+            *'过于频繁'*) skip '手机号注册全链路' '注册额度用满：码已消耗但号没建成，重启后端清零计数后重跑' ;;
+            *) no '手机号注册成功' 'code 0' "$LAST" ;;
+        esac
+    else
+        ok '手机号注册成功'
+        assert_has '用户名按 m+手机号 自动生成' "$(f data.username)" "$phone_r"
+        assert_has '注册后直接签发会话（免二次登录）' "$LAST" '"token"'
+        req GET /api/auth/me '' "$(f data.token)"
+        assert_has '新账号的昵称按填写值落库' "$LAST" '冒烟手机用户'
+        assert_lack '超长昵称被截断而不是报错（尾巴上的 Z 落不了库）' "$(f data.nickname)" 'Z'
+        # 同一个码不能既注册又留着再用；号码此时已注册，注册通道对它关闭
+        req POST /api/auth/register "$TMP/reg-phone.json"
+        assert_has '验证码一次性，用过即废' "$LAST" '验证码不正确或已失效'
+        json_body "$TMP/reg-again.json" phone "$phone_r"
+        req POST /api/auth/sms/register-code "$TMP/reg-again.json"
+        assert_has '刚注册的号码不能再走注册通道' "$LAST" '该手机号已注册'
+    fi
+fi
+
+section '15. 扫码登录：状态机 + 令牌只送达一次'
+# 第 11 节改密已经把 TOK_A 吊销（改回原口令同样吊销），这里重新登录一次拿可用会话
+login_as smoke_a "$PW_A"; TOK_A="$TOKEN"
+# 预检一次「现在还能不能建场景」：本节末尾要压测每分钟创建限额，压满之后同一分钟内再跑，
+# 每条用例都会以「过于频繁」收场——那是限流生效，不是缺陷。所以先探一下，整节改判跳过。
+req POST /api/auth/qrcode
+if [ -z "$TOK_A" ]; then
+    skip '扫码登录用例' 'smoke_a 无法登录，后面的手机侧操作没有登录态可用'
+elif [ "$(f code)" != '0' ]; then
+    skip '扫码登录用例' '本分钟内创建二维码已达上限（预检就被拒），等 1 分钟后重跑即可'
+else
+    qr_new() { # 创建一次扫码场景 → SCENE / QR_URL
+        req POST /api/auth/qrcode
+        SCENE=$(f data.scene); QR_URL=$(f data.confirmUrl)
+    }
+    qr_poll() { req GET "/api/auth/qrcode/$1"; }
+
+    qr_new
+    assert_eq '电脑端创建场景成功' "$(f code)" '0'
+    assert_eq '场景号是 32 位十六进制' "${#SCENE}" '32'
+    assert_has '确认页地址带上了场景号' "$QR_URL" '/scan?scene='
+    case "$QR_URL" in
+        *'://localhost'*|*'://127.'*)
+            skip '确认页地址手机可达' '本机取不到局域网 IPv4，地址退回 localhost；真机扫码请配 ctrip.auth.qrcode-confirm-base' ;;
+        *) ok '确认页地址用的是局域网 IPv4，手机能直接打开' ;;
+    esac
+    qr_poll "$SCENE"
+    assert_eq '刚创建时状态为 PENDING' "$(f data.status)" 'PENDING'
+    req GET '/api/auth/qrcode/deadbeef'
+    assert_eq '非十六进制的场景号一律当作不存在' "$(f data.status)" 'NOT_FOUND'
+
+    # 手机侧三个接口都要求「这台设备已登录」，否则二维码等于公开的登录券
+    req POST "/api/auth/qrcode/$SCENE/scan"
+    assert_has '匿名扫码被拒（code 401）' "$LAST" '"code":401'
+    req POST "/api/auth/qrcode/$SCENE/confirm"
+    assert_has '匿名确认被拒' "$LAST" '"code":401'
+
+    req POST "/api/auth/qrcode/$SCENE/scan" '' "$TOK_A"
+    assert_eq '手机扫码上报成功' "$(f data.status)" 'SCANNED'
+    qr_poll "$SCENE"
+    assert_eq '电脑端看到已扫码' "$(f data.status)" 'SCANNED'
+    assert_has '电脑端显示的是扫码那个账号的昵称' "$(f data.nickname)" '冒烟测试smoke_a'
+
+    req POST "/api/auth/qrcode/$SCENE/confirm" '' "$TOK_A"
+    assert_eq '手机点确认后状态为 CONFIRMED' "$(f data.status)" 'CONFIRMED'
+    qr_poll "$SCENE"
+    assert_eq '电脑端轮询到已确认' "$(f data.status)" 'CONFIRMED'
+    QRT=$(f data.login.token)
+    [ "${#QRT}" -eq 32 ] && ok '领取时当场签发会话令牌' || no '领取时当场签发会话令牌' '32 位 token' "$LAST"
+    req GET /api/auth/me '' "$QRT"
+    assert_has '扫码拿到的令牌就是 smoke_a 的会话' "$LAST" '"username":"smoke_a"'
+    qr_poll "$SCENE"
+    assert_eq '同一次扫码的令牌只会被送达一次（场景行已删除）' "$(f data.status)" 'NOT_FOUND'
+
+    # 取消路径：电脑不该干等到超时
+    qr_new
+    req POST "/api/auth/qrcode/$SCENE/scan" '' "$TOK_A" >/dev/null
+    req POST "/api/auth/qrcode/$SCENE/reject" '' "$TOK_A"
+    assert_eq '手机取消后状态为 REJECTED' "$(f data.status)" 'REJECTED'
+    qr_poll "$SCENE"
+    assert_eq '电脑端立刻看到已取消' "$(f data.status)" 'REJECTED'
+    req POST "/api/auth/qrcode/$SCENE/confirm" '' "$TOK_A"
+    assert_has '取消后不能再确认' "$LAST" '已取消'
+
+    # 手机确认页：合法场景号出页面，非法场景号只回提示、不回显原值
+    req GET "/scan?scene=$SCENE"
+    assert_eq '确认页 HTTP 200' "$HTTP" '200'
+    assert_has '确认页是服务端直出的中文页面' "$LAST" '确认登录'
+    req GET '/scan?scene=%3Cscript%3E'
+    assert_has '非法场景号不拼进页面（防 XSS）' "$LAST" '二维码无效'
+    assert_lack '非法场景号原值不回显' "$LAST" 'script'
+
+    # 过期：把到期时间改到过去，轮询应当钉成 EXPIRED（依赖 MySQL，未给 MYSQL_BIN 时跳过）
+    if [ "$HAS_DB" = '1' ]; then
+        qr_new
+        sql "UPDATE login_qrcode SET expire_time = NOW() - INTERVAL 1 MINUTE WHERE scene = '$SCENE'" >/dev/null
+        qr_poll "$SCENE"
+        assert_eq '到期后轮询返回 EXPIRED' "$(f data.status)" 'EXPIRED'
+        req POST "/api/auth/qrcode/$SCENE/scan" '' "$TOK_A"
+        assert_has '过期二维码不能扫码' "$LAST" '已过期'
+
+        # 手机在有效期内点了确认、电脑却在过期之后才来领取：令牌绝不能发出去。
+        # 早先的写法是先判 CONFIRMED 再判有效期，等于给了一张过了期还能用的登录券。
+        qr_new
+        req POST "/api/auth/qrcode/$SCENE/scan"   '' "$TOK_A" >/dev/null
+        req POST "/api/auth/qrcode/$SCENE/confirm" '' "$TOK_A" >/dev/null
+        sql "UPDATE login_qrcode SET expire_time = NOW() - INTERVAL 1 MINUTE WHERE scene = '$SCENE'" >/dev/null
+        qr_poll "$SCENE"
+        assert_eq '已确认但已过期的场景不发放令牌' "$(f data.status)" 'EXPIRED'
+        assert_lack '过期场景的轮询响应里不带 login 载荷' "$LAST" '"login"'
+    else
+        skip '二维码过期用例' '未提供 MYSQL_BIN 与 MYSQL_PWD，无法把 expire_time 改到过去'
+        skip '已确认但已过期的场景不发放令牌' '同上'
+    fi
+
+    # 创建限流：这个接口不登录就能调，没有每分钟上限的话脚本可以把 login_qrcode 刷满。
+    # 放在本节最后，因为它会把这个 IP 的窗口压满。
+    QR_TRIPPED=0
+    for _ in 1 2 3 4 5 6 7 8 9 10 11 12; do
+        req POST /api/auth/qrcode
+        case "$LAST" in *'过于频繁'*) QR_TRIPPED=1; break ;; esac
+    done
+    if [ "$QR_TRIPPED" = '1' ]; then
+        ok '每分钟创建二维码有上限，压满后拒绝'
+        assert_has '限流提示说清了限额' "$LAST" '每分钟最多'
+    else
+        skip '每分钟创建二维码有上限' '连压 12 次都没被拒：qrcode-max-per-minute 配得偏高（默认 10）'
+    fi
+fi
+
+section '16. 7×24 客服：规则问答（演示，未登录也可用）'
+ask() { # ask 用例名 期望片段 问题
+    json_body "$TMP/ask.json" message "$3"
+    req POST /api/support/chat "$TMP/ask.json"
+    assert_has "$1" "$(f data.reply)" "$2"
+}
+json_body "$TMP/ask.json" message '已支付的订单怎么申请退款'
+req POST /api/support/chat "$TMP/ask.json"
+assert_eq '未登录也能问客服' "$(f code)" '0'
+assert_has '退款问题命中退款规则（优先于「订单」）' "$(f data.reply)" '申请退款'
+assert_eq '回复标成规则演示来源，不冒充大模型' "$(f data.source)" 'rule-demo'
+assert_eq '回复带热线' "$(f data.servicePhone)" '400-168-6688'
+assert_eq '回复声明 7×24' "$(f data.hour24)" 'true'
+ask '超时问题答的是自动取消与库存释放' '自动取消' '订单超时未支付会怎样'
+ask '扫码问题答的是手机确认流程'     '确认登录' '扫码登录怎么用'
+ask '登录问题答的是三种登录方式'      '三种登录方式' '支持哪些登录方式'
+ask '验证码问题答的是有效期'          '验证码' '验证码多久有效'
+ask '问「在吗」也有人接'              '7×24' '在吗'
+json_body "$TMP/ask2.json" message '帮我写一篇介绍悦途旅行的推广文案'
+req POST /api/support/chat "$TMP/ask2.json"
+assert_has '没命中规则时转人工并给热线' "$(f data.reply)" '400-168-6688'
+json_body "$TMP/ask3.json" message ''
+req POST /api/support/chat "$TMP/ask3.json"
+assert_has '空消息不调用模型直接拒' "$LAST" '请输入您想咨询的问题'
+
+section '17. CORS 来源白名单'
 req_preflight() { # 预检：$1=Origin
     curl -s -o /dev/null -D "$TMP/hdr.txt" -X OPTIONS "$BASE/api/orders" \
         -H "Origin: $1" -H 'Access-Control-Request-Method: POST' -H 'Access-Control-Request-Headers: authorization' >/dev/null
@@ -389,13 +646,18 @@ grep -qi 'access-control-allow-origin: null' "$TMP/hdr.txt" \
     && ok '本地文件（Origin: null）放行，可用 ctrip.cors.allow-file-origin=false 关掉' \
     || skip '本地文件来源放行' '当前配置未允许 Origin: null（allow-file-origin=false）'
 
-section '14. 清理测试数据'
+section '18. 清理测试数据'
+CLEAN_WHERE="u.username LIKE 'smoke_%' OR u.username LIKE 'm1390%'"
 if [ "$HAS_DB" = '1' ]; then
-    sql "DELETE s FROM user_session s JOIN app_user u ON u.id=s.user_id WHERE u.username LIKE 'smoke_%';
-         DELETE o FROM travel_order o JOIN app_user u ON u.id=o.user_id WHERE u.username LIKE 'smoke_%';
-         DELETE FROM app_user WHERE username LIKE 'smoke_%';" \
-        && ok '已通过 MySQL 清掉冒烟测试账号、会话与订单' \
+    sql "DELETE FROM sms_code WHERE phone LIKE '1390000%';
+         DELETE FROM login_qrcode WHERE user_id IN (SELECT id FROM app_user WHERE username LIKE 'smoke_%' OR username LIKE 'm1390%');
+         DELETE FROM login_qrcode WHERE status <> 'PENDING' OR expire_time < NOW();
+         DELETE s FROM user_session s JOIN app_user u ON u.id=s.user_id WHERE $CLEAN_WHERE;
+         DELETE o FROM travel_order o JOIN app_user u ON u.id=o.user_id WHERE $CLEAN_WHERE;
+         DELETE FROM app_user WHERE username LIKE 'smoke_%' OR username LIKE 'm1390%';" \
+        && ok '已通过 MySQL 清掉冒烟测试账号、会话、验证码、扫码场景与订单' \
         || no 'MySQL 清理' '执行成功' '执行失败，请用文末 SQL 手工清理'
+    say '  （sms_code / login_qrcode 按演示号段 1390000xxxx 与测试账号清理，init.sql 里的示例客户号码不受影响）'
     say '  （hotel 等商品的余房数被测试单改动过，需要还原请重跑 sql/init.sql）'
 else
     skip '自动清理' '未提供 MYSQL_BIN 与 MYSQL_PWD'
@@ -405,9 +667,11 @@ say ''
 say "结果：通过 $PASS · 失败 $FAIL · 跳过 $SKIP"
 if [ "$FAIL" -gt 0 ]; then
     say '请手工清理测试数据（在 ctrip_travel 库执行）：'
-    say "  DELETE s FROM user_session s JOIN app_user u ON u.id=s.user_id WHERE u.username LIKE 'smoke_%';"
-    say "  DELETE o FROM travel_order o JOIN app_user u ON u.id=o.user_id WHERE u.username LIKE 'smoke_%';"
-    say "  DELETE FROM app_user WHERE username LIKE 'smoke_%';"
+    say "  DELETE FROM sms_code WHERE phone LIKE '1390000%';"
+    say "  DELETE FROM login_qrcode WHERE status <> 'PENDING' OR expire_time < NOW();"
+    say "  DELETE s FROM user_session s JOIN app_user u ON u.id=s.user_id WHERE u.username LIKE 'smoke_%' OR u.username LIKE 'm1390%';"
+    say "  DELETE o FROM travel_order o JOIN app_user u ON u.id=o.user_id WHERE u.username LIKE 'smoke_%' OR u.username LIKE 'm1390%';"
+    say "  DELETE FROM app_user WHERE username LIKE 'smoke_%' OR username LIKE 'm1390%';"
     exit 1
 fi
 exit 0
