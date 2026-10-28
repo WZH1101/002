@@ -1,8 +1,12 @@
 package com.ctrip.controller;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RestController;
+
+import java.util.Set;
 
 /**
  * 根路径状态页：访问 http://localhost:8080/ 时展示服务状态与接口清单，
@@ -10,6 +14,12 @@ import org.springframework.web.bind.annotation.RestController;
  */
 @RestController
 public class IndexController {
+
+    private static final Logger log = LoggerFactory.getLogger(IndexController.class);
+
+    /** 状态页允许统计的表，写死白名单；即使将来有人往 count() 传外部参数也不会拼进 SQL */
+    private static final Set<String> STAT_TABLES =
+            Set.of("hotel", "attraction", "train_ticket", "flight", "bus_ticket", "travel_order");
 
     private final JdbcTemplate jdbc;
 
@@ -32,7 +42,9 @@ public class IndexController {
                     + row("航班", flights) + row("汽车票班次", buses) + row("订单", orders)
                     + "</table>";
         } catch (Exception e) {
-            stats = "<p class='bad'>⚠ 数据库连接异常：" + e.getMessage() + "</p>";
+            // 原始异常只记日志，不把驱动报错/库名/连接串回显到公开页面
+            log.warn("状态页统计失败", e);
+            stats = "<p class='bad'>⚠ 数据库未就绪，请先启动 MySQL 并导入 sql/init.sql</p>";
         }
         return """
                 <!DOCTYPE html>
@@ -79,6 +91,9 @@ public class IndexController {
     }
 
     private long count(String table) {
+        if (!STAT_TABLES.contains(table)) {
+            throw new IllegalArgumentException("未授权统计的表: " + table);
+        }
         Long n = jdbc.queryForObject("SELECT COUNT(*) FROM " + table, Long.class);
         return n == null ? 0 : n;
     }

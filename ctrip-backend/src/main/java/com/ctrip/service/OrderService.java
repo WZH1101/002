@@ -91,24 +91,26 @@ public class OrderService {
         List<Map<String, Object>> rows = jdbc.queryForList(
                 "SELECT order_no,type,item_id,title,date_text,choice_text,quantity,unit_price,total_price,contact_name,phone,status,"
                         + "DATE_FORMAT(pay_time,'%Y/%m/%d %H:%i:%s') AS pay_time FROM travel_order ORDER BY id DESC LIMIT 200");
-        return rows.stream().map(r -> {
-            Map<String, Object> o = new LinkedHashMap<>();
-            o.put("orderNo", r.get("order_no"));
-            o.put("type", r.get("type"));
-            o.put("typeName", TYPE_NAMES.getOrDefault(r.get("type"), "订单"));
-            o.put("itemId", r.get("item_id"));
-            o.put("title", r.get("title"));
-            o.put("dateText", r.get("date_text"));
-            o.put("choiceText", r.get("choice_text"));
-            o.put("quantity", r.get("quantity"));
-            o.put("unitPrice", toNum(r.get("unit_price")));
-            o.put("totalPrice", toNum(r.get("total_price")));
-            o.put("passengerName", r.get("contact_name"));
-            o.put("phone", r.get("phone"));
-            o.put("status", r.get("status"));
-            o.put("payTime", r.get("pay_time"));
-            return o;
-        }).toList();
+        return rows.stream().map(OrderService::toOrderView).toList();
+    }
+
+    private static Map<String, Object> toOrderView(Map<String, Object> r) {
+        Map<String, Object> o = new LinkedHashMap<>();
+        o.put("orderNo", r.get("order_no"));
+        o.put("type", r.get("type"));
+        o.put("typeName", TYPE_NAMES.getOrDefault(r.get("type"), "订单"));
+        o.put("itemId", r.get("item_id"));
+        o.put("title", r.get("title"));
+        o.put("dateText", r.get("date_text"));
+        o.put("choiceText", r.get("choice_text"));
+        o.put("quantity", r.get("quantity"));
+        o.put("unitPrice", toNum(r.get("unit_price")));
+        o.put("totalPrice", toNum(r.get("total_price")));
+        o.put("passengerName", r.get("contact_name"));
+        o.put("phone", r.get("phone"));
+        o.put("status", r.get("status"));
+        o.put("payTime", r.get("pay_time"));
+        return o;
     }
 
     public void clearOrders() {

@@ -1,14 +1,19 @@
 package com.ctrip.controller;
 
 import com.ctrip.api.ApiResponse;
+import com.ctrip.config.AuthInterceptor;
 import com.ctrip.service.UserService;
+import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.Map;
 
 /**
  * 登录注册接口：/api/auth/*
- * token 通过查询参数/请求体传递（避免自定义 Header 的 CORS 预检复杂度）。
+ *
+ * <p>令牌读取顺序为 Authorization: Bearer > X-Token > 查询参数 token，
+ * 与 {@link AuthInterceptor#resolveToken(HttpServletRequest)} 保持一致。
+ * 查询参数方式仅为兼容旧版前端保留，建议前端统一改用 Header（令牌会留在访问日志里）。
  */
 @RestController
 @RequestMapping("/api/auth")
@@ -39,17 +44,23 @@ public class UserController {
     }
 
     @GetMapping("/me")
-    public ApiResponse<?> me(@RequestParam(required = false) String token) {
+    public ApiResponse<?> me(HttpServletRequest request) {
         try {
-            return ApiResponse.ok(userService.me(token));
+            return ApiResponse.ok(userService.me(AuthInterceptor.resolveToken(request)));
         } catch (IllegalStateException e) {
             return ApiResponse.fail(e.getMessage());
         }
     }
 
+    /** 退出登录：优先取 Header 里的令牌，兼容旧前端从请求体传 token */
     @PostMapping("/logout")
-    public ApiResponse<?> logout(@RequestBody Map<String, Object> req) {
-        userService.logout(req.get("token") == null ? null : String.valueOf(req.get("token")));
+    public ApiResponse<?> logout(HttpServletRequest request,
+                                 @RequestBody(required = false) Map<String, Object> req) {
+        String token = AuthInterceptor.resolveToken(request);
+        if (token == null && req != null && req.get("token") != null) {
+            token = String.valueOf(req.get("token"));
+        }
+        userService.logout(token);
         return ApiResponse.ok("ok");
     }
 }

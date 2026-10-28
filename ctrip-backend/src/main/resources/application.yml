@@ -3,15 +3,28 @@ server:
 
 spring:
   datasource:
+    # useSSL=false / allowPublicKeyRetrieval=true 仅在“本机 MySQL + 无密码不可达”的前提下可接受；
+    # 一旦数据库端口暴露到局域网或公网，这两项必须去掉并改用 TLS 连接。
     url: jdbc:mysql://localhost:3306/ctrip_travel?useUnicode=true&characterEncoding=utf8&useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true
-    username: root
-    # 数据库密码：与 reset-mysql-password.bat 重置后的密码一致，可用环境变量 CTRIP_DB_PASSWORD 覆盖
+    username: ${CTRIP_DB_USER:root}
+    # 口令优先取环境变量 CTRIP_DB_PASSWORD。
+    # 冒号后的默认值只为保证 clone 后能直接跑起来，正式使用前请改环境变量并改掉 MySQL 口令，
+    # 因为 reset-mysql-password.bat v4 起已不再把口令写死在脚本里。
     password: ${CTRIP_DB_PASSWORD:Ctrip@123456}
     driver-class-name: com.mysql.cj.jdbc.Driver
     hikari:
       maximum-pool-size: 10
   jackson:
     default-property-inclusion: non_null
+
+# 跨域允许来源。默认只放行 file:// 打开页面（Origin 为 null）与 localhost/127.0.0.1 任意端口；
+# 部署到独立域名时改成具体来源，多个用逗号分隔，不要退回 *。
+#   ctrip:
+#     cors:
+#       allowed-origins: https://travel.example.com
+#ctrip:
+#  cors:
+#    allowed-origins: null,http://localhost:*,http://127.0.0.1:*
 
 logging:
   level:
