@@ -1195,6 +1195,48 @@
         }
         .order-del-btn:hover { color: #ff4d4f; border-color: #ffc9c9; }
 
+        /* 订单详情：从列表卡片进入，字段比列表更全，动作按钮沿用同一套服务端标志 */
+        .od-link { color: #2577e3; font-size: 13px; cursor: pointer; }
+        .od-link:hover { text-decoration: underline; }
+        /* 详情弹窗底部是主操作区，沿用列表小按钮的字号会显得像次要入口 */
+        .modal-footer .order-act-btn,
+        .modal-footer .order-cancel-btn,
+        .modal-footer .order-del-btn { padding: 9px 20px; font-size: 14px; }
+        .modal-footer .order-cancel-btn:disabled,
+        .modal-footer .order-act-btn:disabled,
+        .modal-footer .order-del-btn:disabled { cursor: default; }
+        .od-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1px;
+            background: #eef0f3;
+            border: 1px solid #eef0f3;
+            border-radius: 8px;
+            overflow: hidden;
+            margin-bottom: 14px;
+        }
+        .od-item { background: #fff; padding: 10px 12px; }
+        .od-item.wide { grid-column: 1 / -1; }
+        .od-k { font-size: 12px; color: #999; margin-bottom: 3px; }
+        .od-v { font-size: 14px; color: #333; word-break: break-all; }
+        .od-v.money { color: #ff4d4f; font-weight: bold; }
+        .od-v.muted { color: #bbb; }
+        .od-tip { font-size: 12px; color: #999; margin-left: 6px; }
+        /* 状态流转留痕：只列已经发生的时间，未发生的显式留白比藏起来更好读 */
+        .od-lines { border-top: 1px dashed #e5e5e5; padding-top: 10px; margin-bottom: 6px; }
+        .od-line { display: flex; gap: 10px; font-size: 13px; color: #666; padding: 3px 0; }
+        .od-line i { color: #c9c9c9; width: 60px; flex: none; }
+        .od-line.hit i { color: #2577e3; }
+        .od-line.hit { color: #333; }
+        .od-note {
+            background: #f7f9fc;
+            border-radius: 6px;
+            padding: 9px 12px;
+            font-size: 12px;
+            color: #888;
+            line-height: 1.7;
+        }
+
         /* 收银台倒计时条：待支付订单锁着库存，必须让用户看见「多久不付就自动取消」 */
         .pay-countdown {
             display: flex;
@@ -4114,7 +4156,7 @@
                                 <span>{{ order.choiceText }} × {{ order.quantity }}</span>
                             </div>
                             <div class="order-history-row" style="display: flex; justify-content: space-between; padding: 4px 0; font-size: 13px; color: #666;">
-                                <span style="color: #999;">订单号: {{ order.orderNo }}</span>
+                                <span class="od-link" @click="openOrderDetail(order)" title="查看订单详情与办理退款">订单号: {{ order.orderNo }} ›</span>
                                 <span style="color: #ff4d4f; font-weight: bold;">¥{{ order.totalPrice }}</span>
                             </div>
                             <div class="order-history-row" style="display: flex; justify-content: space-between; padding: 4px 0; font-size: 13px; color: #666;">
@@ -4131,6 +4173,120 @@
                 <div class="modal-footer">
                     <button class="btn-default" @click="clearOrders" v-if="pendingOrders.length > 0" title="取消本人全部待支付订单并回补库存">取消全部待支付</button>
                     <button class="btn-primary" @click="closeOrders">关闭</button>
+                </div>
+            </div>
+        </div>
+        </transition>
+
+        <!-- 订单详情弹窗：从订单中心的订单号进入。
+             按钮仍按后端返回的 payable/cancellable/refundable/deletable 显示，
+             与列表卡片共用同一批方法，不会出现「列表能退、详情不能退」的口径分叉。 -->
+        <transition name="fade">
+        <div class="modal-overlay" v-if="showOrderDetail && detailOrder" @click.self="closeOrderDetail">
+            <div class="modal" style="max-width: 620px;">
+                <div class="modal-header">
+                    <div class="modal-title">订单详情</div>
+                    <button class="modal-close" @click="closeOrderDetail">×</button>
+                </div>
+                <div class="modal-body">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px;">
+                        <span style="font-weight: bold; font-size: 15px;">
+                            <span class="order-type-tag" :class="detailOrder.type">{{ detailOrder.typeName }}</span>{{ detailOrder.title }}
+                        </span>
+                        <span style="display: flex; align-items: center; gap: 8px;">
+                            <em class="order-status" :class="orderStatusClass(detailOrder)">{{ detailOrder.status || '已支付' }}</em>
+                            <span class="os-left" v-if="detailOrder.status === '待支付' && remainMs(detailOrder) > 0">
+                                剩余 {{ remainText(detailOrder) }}
+                            </span>
+                        </span>
+                    </div>
+
+                    <div class="od-grid">
+                        <div class="od-item">
+                            <div class="od-k">订单号</div>
+                            <div class="od-v">{{ detailOrder.orderNo }}</div>
+                        </div>
+                        <div class="od-item">
+                            <div class="od-k">预订规格</div>
+                            <div class="od-v">{{ detailOrder.choiceText || '—' }} × {{ detailOrder.quantity || 1 }}</div>
+                        </div>
+                        <div class="od-item">
+                            <div class="od-k">单价</div>
+                            <div class="od-v">¥{{ detailOrder.unitPrice === undefined ? '—' : detailOrder.unitPrice }}</div>
+                        </div>
+                        <div class="od-item">
+                            <div class="od-k">实付金额</div>
+                            <div class="od-v money">¥{{ detailOrder.totalPrice }}</div>
+                        </div>
+                        <div class="od-item">
+                            <div class="od-k">出行信息</div>
+                            <div class="od-v">{{ detailOrder.dateText || '—' }}</div>
+                        </div>
+                        <div class="od-item">
+                            <div class="od-k">支付方式</div>
+                            <div class="od-v">{{ detailOrder.payText || '在线支付' }}</div>
+                        </div>
+                        <div class="od-item">
+                            <div class="od-k">联系人</div>
+                            <div class="od-v">{{ detailOrder.passengerName || detailOrder.name || '—' }}</div>
+                        </div>
+                        <div class="od-item">
+                            <div class="od-k">手机号</div>
+                            <div class="od-v">
+                                {{ detailOrder.phone || '—' }}
+                                <span class="od-tip" v-if="isServerOrder(detailOrder)">后端已脱敏</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="od-lines">
+                        <div class="od-line hit" v-if="detailOrder.status === '待支付'">
+                            <i>支付截止</i><span>{{ detailOrder.payDeadline || '—' }}</span>
+                            <span class="od-tip" v-if="remainMs(detailOrder) > 0">剩余 {{ remainText(detailOrder) }}</span>
+                        </div>
+                        <div class="od-line hit" v-if="detailOrder.payTime">
+                            <i>支付时间</i><span>{{ detailOrder.payTime }}</span>
+                        </div>
+                        <div class="od-line hit" v-if="detailOrder.cancelTime">
+                            <i>取消时间</i><span>{{ detailOrder.cancelTime }}</span>
+                        </div>
+                        <div class="od-line hit" v-if="detailOrder.refundTime">
+                            <i>退款时间</i><span>{{ detailOrder.refundTime }}</span>
+                        </div>
+                    </div>
+
+                    <div class="od-note">
+                        <span v-if="detailOrder.status === '待支付'">
+                            本单尚未支付，库存已锁定；超过支付截止时间未付款，后端定时任务会自动取消并回补库存，你也可以直接取消。
+                        </span>
+                        <span v-else-if="detailOrder.status === '已支付'">
+                            本单已支付，可点「申请退款」发起退款；确认后订单转为「已退款」并释放库存。
+                            演示站没有真实资金通道，退款只改状态与库存，不发生实际扣款。
+                        </span>
+                        <span v-else-if="detailOrder.status === '已退款'">
+                            退款已受理{{ detailOrder.refundAmount ? '，退款金额 ¥' + detailOrder.refundAmount : '' }}。
+                            已退款订单可删除记录；未付或未退的钱不允许凭空抹掉流水，所以只有这两种状态能删。
+                        </span>
+                        <span v-else>
+                            订单已取消，锁定的余票/库存已释放。已取消订单可删除记录，删除后列表不再可见。
+                        </span>
+                        <span v-if="detailOrder.serverOrder === false">当前为本地演示订单，数据只存在这台浏览器的 localStorage。</span>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button class="order-act-btn" v-if="canPayOrder(detailOrder)"
+                        :disabled="busyOrderNo === detailOrder.orderNo"
+                        @click="resumePay(detailOrder)">去支付</button>
+                    <button class="order-cancel-btn" v-if="canCancelOrder(detailOrder)"
+                        :disabled="busyOrderNo === detailOrder.orderNo"
+                        @click="cancelOrder(detailOrder)">{{ busyOrderNo === detailOrder.orderNo ? '处理中…' : '取消订单' }}</button>
+                    <button class="order-cancel-btn" v-if="canRefundOrder(detailOrder)"
+                        :disabled="busyOrderNo === detailOrder.orderNo"
+                        @click="refundOrder(detailOrder)">{{ busyOrderNo === detailOrder.orderNo ? '处理中…' : '申请退款' }}</button>
+                    <button class="order-del-btn" v-if="canDeleteOrder(detailOrder)"
+                        :disabled="busyOrderNo === detailOrder.orderNo"
+                        @click="deleteOrder(detailOrder)">删除记录</button>
+                    <button class="btn-default" @click="closeOrderDetail">返回</button>
                 </div>
             </div>
         </div>
@@ -5250,6 +5406,10 @@
                 showSuccessModal: false,
                 orders: [],
                 showOrderModal: false,
+                // 订单详情弹窗。detailOrder 直接引用 orders 里的那条对象，
+                // 详情与列表共用同一批动作方法，退款后两边状态一起变，无需二次拉取
+                showOrderDetail: false,
+                detailOrder: null,
 
                 // 功能中心（侧栏子菜单真实功能）
                 showFeature: false,
@@ -5405,11 +5565,11 @@
                             title: '常见问题', icon: 'fas fa-circle-question',
                             intro: '下面是用户最常问的 6 个问题，点击左侧各服务入口可以直达对应模块。',
                             sections: [
-                                { h: '如何修改或取消订单？', p: '进入订单中心找到对应订单，点「取消订单」即可，取消后余票/库存会回补，订单状态留痕为「已取消」；演示站另提供“全部取消”用于一次重置本人订单。' },
+                                { h: '如何修改或取消订单？', p: '进入订单中心找到对应订单：待支付点「取消订单」，已支付点「申请退款」，取消或退款后余票/库存会回补，状态分别留痕为「已取消」「已退款」。也可点订单号进入「订单详情」办理，页内还提供「删除记录」清理已取消/已退款的单据；演示站另提供“取消全部待支付”用于一次重置本人订单。' },
                                 { h: '门票当天能订吗？', p: '可以，大部分景点支持当日入园，活动类产品建议提前 1 天预订以免名额已满。' },
                                 { h: '火车票如何取票？', p: '下单后凭乘车人身份证在车站自助机或窗口取票，部分车次支持刷证直接进站。' },
                                 { h: '支付失败怎么办？', p: '先确认支付方式可用与网络正常；连续失败可更换支付渠道，款项一般 1-3 个工作日退回。' },
-                                { h: '订单在哪里查看？', p: '点击页脚“订单中心”或右侧导航栏的订单入口，即可看到全部订单与金额明细。' },
+                                { h: '订单在哪里查看？', p: '点击页脚“订单中心”或右侧导航栏的订单入口，即可看到全部订单与金额明细；点订单号还能打开订单详情，查看规格、支付渠道与状态流转时间。' },
                                 { h: '发票怎么开？', p: '演示站暂不支持开票；实际业务中可在订单完成后申请电子发票，开票信息可在账号设置中维护。' }
                             ]
                         },
@@ -6492,7 +6652,10 @@
                         const meta = JSON.parse(localStorage.getItem('ctripOrderMeta') || '{}');
                         meta[order.orderNo] = {
                             seat: order.seat, invoiced: order.invoiced,
-                            refundAmount: order.refundAmount, refundTime: order.refundTime
+                            refundAmount: order.refundAmount, refundTime: order.refundTime,
+                            // 后端 travel_order 不存支付渠道（演示站没有真实扣款），
+                            // 不补这一笔的话刷新后详情页只能显示兜底的「在线支付」
+                            payKey: order.payKey, payText: order.payText
                         };
                         localStorage.setItem('ctripOrderMeta', JSON.stringify(meta));
                     } catch (e) { }
@@ -8255,6 +8418,18 @@
 
                 closeOrders() {
                     this.showOrderModal = false;
+                    // 详情浮在列表之上，列表关了就等于整个订单中心收起，避免留一个孤零零的详情
+                    this.showOrderDetail = false;
+                },
+
+                openOrderDetail(order) {
+                    this.detailOrder = order;
+                    this.showOrderDetail = true;
+                },
+
+                closeOrderDetail() {
+                    this.showOrderDetail = false;
+                    this.detailOrder = null;
                 },
 
                 // 状态徽标配色：后端 travel_order.status 四态（待支付/已支付/已取消/已退款）
@@ -8323,6 +8498,7 @@
                     this.payVerified = false;
                     this.payVerifyShow = false;
                     this.showOrderModal = false;
+                    this.showOrderDetail = false;
                     this.showConfirmModal = true;
                 },
 
@@ -8363,6 +8539,8 @@
                         this.request(path, { method: method }).then(res => {
                             if (action === 'delete') {
                                 this.orders = this.orders.filter(o => o.orderNo !== order.orderNo);
+                                // 记录已经不存在，详情页留着只会显示一条删掉的单
+                                if (this.detailOrder && this.detailOrder.orderNo === order.orderNo) this.closeOrderDetail();
                             } else {
                                 // 服务端返回的是这条单的最新视图，状态与四个动作标志都以它为准
                                 Object.assign(order, res || {});
@@ -8380,6 +8558,7 @@
                     // 本地演示订单
                     if (action === 'delete') {
                         this.orders = this.orders.filter(o => o.orderNo !== order.orderNo);
+                        if (this.detailOrder && this.detailOrder.orderNo === order.orderNo) this.closeOrderDetail();
                     } else if (action === 'refund') {
                         this.$set(order, 'refundTime', new Date().toLocaleString());
                         this.$set(order, 'refundAmount', order.totalPrice);
@@ -8568,6 +8747,7 @@
                     if (this.showPayModal) { this.closePay(); return; }
                     if (this.showConfirmModal) { this.closeConfirm(); return; }
                     if (this.showBookingModal) { this.closeBooking(); return; }
+                    if (this.showOrderDetail) { this.closeOrderDetail(); return; }
                     if (this.showOrderModal) { this.closeOrders(); return; }
                     if (this.showTool) { this.closeTool(); return; }
                     if (this.showFeature) { this.closeFeature(); return; }
