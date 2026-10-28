@@ -1149,6 +1149,69 @@
         .order-type-tag.flight { background: #ff7d00; }
         .order-type-tag.bus { background: #00a6a6; }
 
+        /* 订单状态徽标 + 取消入口：状态以后端 travel_order.status 为准，不再写死「已支付」 */
+        .order-status {
+            display: inline-block;
+            padding: 2px 9px;
+            font-size: 12px;
+            border-radius: 3px;
+            font-style: normal;
+        }
+        .order-status.paid { background: #e8f7ef; color: #1ea672; }
+        .order-status.pending { background: #fff5e6; color: #ff7d00; }
+        .order-status.cancelled { background: #f2f3f5; color: #999; }
+        .order-status.refunded { background: #f0e9ff; color: #8a5cf6; }
+        /* 待支付剩余时间：跟着 nowTick 每秒刷新 */
+        .os-left { font-size: 12px; color: #d4700a; font-variant-numeric: tabular-nums; }
+        .order-cancel-btn {
+            border: 1px solid #ffc9c9;
+            background: #fff;
+            color: #ff4d4f;
+            font-size: 12px;
+            padding: 3px 10px;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        .order-cancel-btn:hover:not(:disabled) { background: #fff1f0; }
+        .order-cancel-btn:disabled { color: #bbb; border-color: #eee; cursor: default; }
+        .order-act-btn {
+            border: 1px solid #cfe1ff;
+            background: #f5f9ff;
+            color: #2577e3;
+            font-size: 12px;
+            padding: 3px 10px;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        .order-act-btn:hover { background: #e8f1ff; }
+        .order-del-btn {
+            border: 1px solid #e5e5e5;
+            background: #fff;
+            color: #888;
+            font-size: 12px;
+            padding: 3px 10px;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        .order-del-btn:hover { color: #ff4d4f; border-color: #ffc9c9; }
+
+        /* 收银台倒计时条：待支付订单锁着库存，必须让用户看见「多久不付就自动取消」 */
+        .pay-countdown {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            background: #fff8ef;
+            border: 1px solid #ffe4c4;
+            border-radius: 6px;
+            padding: 10px 12px;
+            margin-top: 14px;
+            font-size: 13px;
+            color: #d4700a;
+        }
+        .pay-countdown b { font-size: 16px; font-variant-numeric: tabular-nums; }
+        .pay-countdown .pc-no { margin-left: auto; font-style: normal; color: #bbb; font-size: 12px; }
+        .pay-countdown.done { background: #f0faf4; border-color: #d4efdf; color: #1ea672; }
+
         /* 通知 */
         .notification-wrap {
             position: fixed;
@@ -2058,6 +2121,8 @@
         .auth-submit:hover { opacity: .9; }
         .auth-switch { text-align: center; font-size: 13px; color: #999; margin-top: 14px; }
         .auth-switch span { color: #2577e3; cursor: pointer; }
+        /* 改密码面板的说明：提醒改密会吊销全部会话，避免用户以为还能继续用旧登录态 */
+        .auth-tip { font-size: 12px; color: #ff7d00; background: #fff8ef; border-radius: 4px; padding: 8px 10px; margin-top: 12px; line-height: 1.6; }
 
         @media (max-width: 1280px) {
             .side-nav { display: none; }
@@ -3326,12 +3391,13 @@
         <div class="modal-overlay" v-if="showAuthModal" @click.self="showAuthModal = false">
             <div class="modal" style="max-width: 400px;">
                 <div class="modal-header">
-                    <div class="modal-title">{{ authTab === 'login' ? '登录悦途' : '注册新账号' }}</div>
+                    <div class="modal-title">{{ authTab === 'login' ? '登录悦途' : authTab === 'register' ? '注册新账号' : '修改密码' }}</div>
                     <button class="modal-close" @click="showAuthModal = false">×</button>
                 </div>
                 <div class="auth-tabs">
                     <div class="auth-tab" :class="{on: authTab === 'login'}" @click="authTab = 'login'">登录</div>
                     <div class="auth-tab" :class="{on: authTab === 'register'}" @click="authTab = 'register'">注册</div>
+                    <div class="auth-tab" :class="{on: authTab === 'password'}" @click="authTab = 'password'">改密码</div>
                 </div>
                 <div class="auth-body">
                     <template v-if="authTab === 'login'">
@@ -3346,13 +3412,13 @@
                         <button class="auth-submit" @click="doLogin">登 录</button>
                         <div class="auth-switch">还没有账号？<span @click="authTab = 'register'">立即注册</span></div>
                     </template>
-                    <template v-else>
+                    <template v-else-if="authTab === 'register'">
                         <div class="auth-field">
                             <label>用户名（3-20 位中英文/数字/下划线）</label>
                             <input type="text" v-model="registerForm.username" placeholder="设置用户名">
                         </div>
                         <div class="auth-field">
-                            <label>密码（至少 6 位）</label>
+                            <label>密码（至少 8 位，需含字母和数字）</label>
                             <input type="password" v-model="registerForm.password" placeholder="设置密码">
                         </div>
                         <div class="auth-field">
@@ -3365,6 +3431,22 @@
                         </div>
                         <button class="auth-submit" @click="doRegister">注 册</button>
                         <div class="auth-switch">已有账号？<span @click="authTab = 'login'">去登录</span></div>
+                    </template>
+                    <template v-else>
+                        <div class="auth-field">
+                            <label>当前密码</label>
+                            <input type="password" v-model="pwdForm.oldPassword" placeholder="请输入正在使用的密码">
+                        </div>
+                        <div class="auth-field">
+                            <label>新密码（至少 8 位，需含字母和数字）</label>
+                            <input type="password" v-model="pwdForm.newPassword" placeholder="设置新密码">
+                        </div>
+                        <div class="auth-field">
+                            <label>确认新密码</label>
+                            <input type="password" v-model="pwdForm.confirm" placeholder="再输入一次新密码" @keyup.enter="doChangePassword">
+                        </div>
+                        <button class="auth-submit" @click="doChangePassword">确认修改</button>
+                        <div class="auth-tip"><i class="fas fa-shield-alt"></i> 修改成功后，本账号在所有设备的登录状态都会立即失效，需用新密码重新登录。</div>
                     </template>
                 </div>
             </div>
@@ -3646,9 +3728,19 @@
                             <span class="order-detail-value" style="color: #ff4d4f; font-size: 22px;">¥{{ orderInfo.totalPrice }}</span>
                         </div>
                     </div>
+                    <!-- 支付倒计时：订单已锁住库存，超时未付由后端定时任务自动取消并释放 -->
+                    <div class="pay-countdown" v-if="orderInfo.status === '待支付'">
+                        <i class="fas fa-hourglass-half"></i>
+                        <span v-if="remainMs(orderInfo) > 0">请在 <b>{{ remainText(orderInfo) }}</b> 内完成支付，超时订单自动取消并释放库存</span>
+                        <span v-else>支付已超时，订单即将自动取消</span>
+                        <em class="pc-no">订单号 {{ orderInfo.orderNo }}</em>
+                    </div>
+                    <div class="pay-countdown done" v-else-if="orderInfo.status === '已支付'">
+                        <i class="fas fa-check-circle"></i><span>该订单已支付完成</span>
+                    </div>
                 </div>
                 <div class="modal-footer">
-                    <button class="btn-default" @click="closeConfirm">取消</button>
+                    <button class="btn-default" @click="closeConfirm">稍后支付</button>
                     <button class="btn-primary" @click="payOrder"><i class="fas fa-credit-card"></i> 立即支付 ¥{{ orderInfo.totalPrice }}</button>
                 </div>
             </div>
@@ -3998,7 +4090,24 @@
                                     <span class="order-type-tag" :class="order.type">{{ order.typeName }}</span>
                                     <span style="font-weight: bold;">{{ order.title }}</span>
                                 </span>
-                                <span style="color: #52c41a; font-size: 13px;">已支付</span>
+                                <span style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap; justify-content: flex-end;">
+                                    <em class="order-status" :class="orderStatusClass(order)">{{ order.status || '已支付' }}</em>
+                                    <span class="os-left" v-if="order.status === '待支付' && remainMs(order) > 0">
+                                        剩余 {{ remainText(order) }}
+                                    </span>
+                                    <button class="order-act-btn" v-if="canPayOrder(order)"
+                                        :disabled="busyOrderNo === order.orderNo"
+                                        @click="resumePay(order)">去支付</button>
+                                    <button class="order-cancel-btn" v-if="canCancelOrder(order)"
+                                        :disabled="busyOrderNo === order.orderNo"
+                                        @click="cancelOrder(order)">{{ busyOrderNo === order.orderNo ? '处理中…' : '取消订单' }}</button>
+                                    <button class="order-cancel-btn" v-if="canRefundOrder(order)"
+                                        :disabled="busyOrderNo === order.orderNo"
+                                        @click="refundOrder(order)">申请退款</button>
+                                    <button class="order-del-btn" v-if="canDeleteOrder(order)"
+                                        :disabled="busyOrderNo === order.orderNo"
+                                        @click="deleteOrder(order)">删除</button>
+                                </span>
                             </div>
                             <div class="order-history-row" style="display: flex; justify-content: space-between; padding: 4px 0; font-size: 13px; color: #666;">
                                 <span>{{ order.dateText }}</span>
@@ -4010,7 +4119,7 @@
                             </div>
                             <div class="order-history-row" style="display: flex; justify-content: space-between; padding: 4px 0; font-size: 13px; color: #666;">
                                 <span style="color: #999;">支付方式: {{ order.payText || '在线支付' }}</span>
-                                <span style="color: #999;">{{ order.payTime || '' }}</span>
+                                <span style="color: #999;">{{ orderTimeText(order) }}</span>
                             </div>
                         </div>
                     </div>
@@ -4020,7 +4129,7 @@
                     </div>
                 </div>
                 <div class="modal-footer">
-                    <button class="btn-default" @click="clearOrders" v-if="orders.length > 0">清空订单</button>
+                    <button class="btn-default" @click="clearOrders" v-if="pendingOrders.length > 0" title="取消本人全部待支付订单并回补库存">取消全部待支付</button>
                     <button class="btn-primary" @click="closeOrders">关闭</button>
                 </div>
             </div>
@@ -4502,6 +4611,17 @@
                 authTab: 'login',
                 loginForm: { username: '', password: '' },
                 registerForm: { username: '', password: '', nickname: '', phone: '' },
+                // 改密码面板：改密成功后后端会把该账号所有会话令牌吊销，所以必须重新登录
+                pwdForm: { oldPassword: '', newPassword: '', confirm: '' },
+                // 口令规则文案，与后端 UserService.PWD_RULE 同步维护
+                pwdRuleTip: '密码需至少 8 位，且同时包含字母和数字',
+                // 正在处理（支付/取消/退款/删除）的订单号：按钮置灰用，避免同一单被连点两次
+                busyOrderNo: '',
+                // 待支付倒计时的心跳时间戳（1 秒一跳）与定时器句柄
+                nowTick: Date.now(),
+                payTickTimer: null,
+                // 本地演示模式没有后端定时任务，超时判定在前端做；窗口与 ctrip.order.pay-deadline-minutes 对齐
+                localPayWindowMin: 15,
                 currentUser: null, // {username, nickname, phone, token}
                 recoCities: ['上海', '北京', '广州', '三亚'],
                 recoCity: '上海',
@@ -5235,6 +5355,10 @@
                 notifications: []
             },
             computed: {
+                // 「取消全部待支付」的作用对象：与后端批量取消口径一致，只动未支付的单子
+                pendingOrders() {
+                    return this.orders.filter(o => o.status === '待支付');
+                },
                 // 页脚信息弹窗内容：根据 infoKey 取对应文案
                 infoContent() {
                     const map = {
@@ -5274,14 +5398,14 @@
                                 { h: '收集的信息', p: '下单时填写的联系人姓名、手机号、出行日期与选择的产品；登录时使用的账号与昵称。' },
                                 { h: '使用方式', p: '仅用于生成与展示订单；本地演示模式下数据保存在浏览器 localStorage，不会上传到任何服务器。' },
                                 { h: '存储与保护', p: '接入后端时订单写入本地 MySQL，通过接口鉴权与最小权限账号访问，不向第三方共享。' },
-                                { h: '你的权利', p: '可随时在订单中心清空订单记录，或在浏览器设置中清除本地存储以删除全部演示数据。' }
+                                { h: '你的权利', p: '可随时在订单中心取消订单记录，或在浏览器设置中清除本地存储以删除全部演示数据。' }
                             ]
                         },
                         faq: {
                             title: '常见问题', icon: 'fas fa-circle-question',
                             intro: '下面是用户最常问的 6 个问题，点击左侧各服务入口可以直达对应模块。',
                             sections: [
-                                { h: '如何修改或取消订单？', p: '进入订单中心找到对应订单，在出行前按退改规则操作；演示站提供“清空订单”用于重置数据。' },
+                                { h: '如何修改或取消订单？', p: '进入订单中心找到对应订单，点「取消订单」即可，取消后余票/库存会回补，订单状态留痕为「已取消」；演示站另提供“全部取消”用于一次重置本人订单。' },
                                 { h: '门票当天能订吗？', p: '可以，大部分景点支持当日入园，活动类产品建议提前 1 天预订以免名额已满。' },
                                 { h: '火车票如何取票？', p: '下单后凭乘车人身份证在车站自助机或窗口取票，部分车次支持刷证直接进站。' },
                                 { h: '支付失败怎么办？', p: '先确认支付方式可用与网络正常；连续失败可更换支付渠道，款项一般 1-3 个工作日退回。' },
@@ -6279,16 +6403,51 @@
                     };
                 },
 
+                /**
+                 * 退改签「申请退票」。
+                 * 只有已支付订单可以退：待支付应该直接取消（没锁资金，也不必走退款），
+                 * 已取消/已退款则提示重复操作。
+                 * MySQL 真单走 POST /api/orders/{no}/refund（服务端校验归属与状态并回补库存），
+                 * 本地演示单就地改状态；80% 退款比例是页面演示规则，后端只记状态与时间。
+                 */
                 featureRefund(order) {
-                    if (order.status === '已退款') { this.showNotification('该订单已退款', true); return; }
+                    const s = order.status || '已支付';
+                    if (s === '已退款') { this.showNotification('该订单已退款', true); return; }
+                    if (s === '待支付') {
+                        this.showNotification('订单尚未支付，直接在订单中心「取消订单」即可，无需退票', true);
+                        return;
+                    }
+                    if (s !== '已支付') { this.showNotification('只有已支付订单可以申请退票', true); return; }
+                    if (!this.ensureLogin('办理退票')) return;
                     const amount = Math.round((order.totalPrice || 0) * 0.8);
-                    this.$set(order, 'status', '已退款');
-                    this.$set(order, 'refundAmount', amount);
-                    this.$set(order, 'refundTime', new Date().toLocaleString());
-                    this.saveOrderMeta(order);
-                    this.loadFeatureOrders();
-                    this.featureMsg = '已为订单 ' + order.orderNo + ' 办理退票，退款 ¥' + amount + ' 将原路退回（收取 20% 退票费）';
-                    this.showNotification('退票成功，退款 ¥' + amount + ' 原路退回');
+                    const markRefunded = () => {
+                        this.applyFlags(order, '已退款');
+                        this.$set(order, 'refundAmount', amount);
+                        this.$set(order, 'refundTime', new Date().toLocaleString());
+                        this.$set(order, 'payExpireMs', null);
+                        this.saveOrderMeta(order);
+                        this.loadFeatureOrders();
+                        this.featureMsg = '已为订单 ' + order.orderNo + ' 办理退票，退款 ¥' + amount + ' 将原路退回（收取 20% 退票费）';
+                        this.showNotification('退票成功，退款 ¥' + amount + ' 原路退回');
+                    };
+                    if (this.isServerOrder(order) && this.serverToken()) {
+                        this.busyOrderNo = order.orderNo;
+                        this.request('/orders/' + encodeURIComponent(order.orderNo) + '/refund', { method: 'POST' })
+                            .then(res => {
+                                Object.assign(order, res || {});
+                                this.restoreLocalStock(order);
+                                markRefunded();
+                            })
+                            .catch(err => {
+                                this.showNotification((err && err.message) || '退票失败，请稍后重试', true);
+                                this.loadOrders();
+                            })
+                            .finally(() => { this.busyOrderNo = ''; });
+                        return;
+                    }
+                    this.restoreLocalStock(order);
+                    markRefunded();
+                    this.saveLocalOrders();
                 },
 
                 featureInvoice(order) {
@@ -6325,12 +6484,14 @@
                     this.showNotification('值机成功，座位 ' + seat);
                 },
 
-                // 订单状态/座位/发票 本地持久化（适配 MySQL 订单无更新接口）
+                // 订单座位/发票/退款金额等「页面附加信息」本地持久化。
+                // 注意：这里刻意不再保存 status——订单状态以后端 travel_order.status 为准，
+                // 本地覆盖会把「已取消/已退款」的真实状态改回旧值（以前后端没有状态接口才出此下策）
                 saveOrderMeta(order) {
                     try {
                         const meta = JSON.parse(localStorage.getItem('ctripOrderMeta') || '{}');
                         meta[order.orderNo] = {
-                            status: order.status, seat: order.seat, invoiced: order.invoiced,
+                            seat: order.seat, invoiced: order.invoiced,
                             refundAmount: order.refundAmount, refundTime: order.refundTime
                         };
                         localStorage.setItem('ctripOrderMeta', JSON.stringify(meta));
@@ -6414,7 +6575,9 @@
                         choiceLabel: '类型', choiceText: choice,
                         passengerName: f.name.trim(), phone: (f.phone || '').trim(),
                         quantity: qty, unitPrice: unit, totalPrice: total,
-                        status: status, payTime: new Date().toLocaleString(), feature: true
+                        status: status, payTime: new Date().toLocaleString(), feature: true,
+                        // 特色功能（抢票/学生票/企业用车等）只在页面生成，MySQL 里没有这条记录
+                        serverOrder: false
                     };
                     this.orders.unshift(order);
                     this.saveOrderMeta(order);
@@ -6813,7 +6976,7 @@
                         if (!String(this.bookingForm.name || '').trim()) {
                             this.bookingForm.name = user.nickname || user.username || '';
                         }
-                        if (!this.bookingForm.phone && user.phone) this.bookingForm.phone = user.phone;
+                        if (!this.bookingForm.phone && this.isPlainPhone(user.phone)) this.bookingForm.phone = user.phone;
                     }
                     // 登录拿到了后端令牌，此时才有权读 /api/orders，重新拉一次真实订单
                     if (this.serverToken()) this.loadOrders();
@@ -6873,7 +7036,9 @@
                     const f = this.registerForm;
                     const username = f.username.trim();
                     if (!/^[A-Za-z0-9_\u4e00-\u9fa5]{3,20}$/.test(username)) { this.showNotification('用户名需 3-20 位（中英文、数字、下划线）', true); return; }
-                    if (f.password.length < 6) { this.showNotification('密码长度至少 6 位', true); return; }
+                    // 与后端 UserService 同规则：至少 8 位且含字母+数字。前端先拦一道省一次往返，
+                    // 真正的判定仍在后端（前端校验可被绕过）
+                    if (!this.isStrongPassword(f.password)) { this.showNotification(this.pwdRuleTip, true); return; }
                     if (f.phone && !/^1[3-9]\d{9}$/.test(f.phone)) { this.showNotification('请输入11位有效手机号码', true); return; }
                     const body = Object.assign({}, f, { username });
                     this.request('/auth/register', {
@@ -6899,6 +7064,49 @@
                         } else {
                             this.showNotification(err.message, true);
                         }
+                    });
+                },
+
+                // 口令强度：与后端 UserService.PWD_RULE 同规则（至少 8 位 + 字母 + 数字）
+                isStrongPassword(pwd) {
+                    return typeof pwd === 'string' && pwd.length >= 8 && /[A-Za-z]/.test(pwd) && /\d/.test(pwd);
+                },
+
+                // 是否为可直接使用的完整手机号（后端订单接口只回掩码号，不能当真实号码用）
+                isPlainPhone(phone) {
+                    return /^1[3-9]\d{9}$/.test(String(phone || ''));
+                },
+
+                /**
+                 * 修改密码：只在后端模式可用（本地演示模式的口令哈希是页面自己造的，没有可改的账号体系）。
+                 * 成功后后端会把该账号 auth_ver +1 并清掉 user_session，旧令牌全部失效，
+                 * 所以这里必须同步清掉本地登录态并切回登录页，否则后续请求会一路 401。
+                 */
+                doChangePassword() {
+                    if (!this.serverToken()) {
+                        this.showNotification('改密码需用平台账号登录（本地演示账号不支持）', true);
+                        this.openAuth('login');
+                        return;
+                    }
+                    const f = this.pwdForm;
+                    if (!f.oldPassword) { this.showNotification('请输入当前密码', true); return; }
+                    if (!this.isStrongPassword(f.newPassword)) { this.showNotification(this.pwdRuleTip, true); return; }
+                    if (f.newPassword !== f.confirm) { this.showNotification('两次输入的新密码不一致', true); return; }
+                    if (f.newPassword === f.oldPassword) { this.showNotification('新密码不能与当前密码相同', true); return; }
+                    this.request('/auth/password', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ oldPassword: f.oldPassword, newPassword: f.newPassword })
+                    }).then(msg => {
+                        this.dropStaleAuth();
+                        this.orders = [];
+                        this.pwdForm = { oldPassword: '', newPassword: '', confirm: '' };
+                        this.authTab = 'login';
+                        this.showNotification(typeof msg === 'string' ? msg : '密码已修改，请用新密码重新登录');
+                    }).catch(err => {
+                        // 401 时 request 已清掉登录态，这里补一句说明并跳回登录页
+                        if (err && /过期|重新登录/.test(err.message)) { this.dropStaleAuth(); this.authTab = 'login'; }
+                        this.showNotification((err && err.message) || '修改密码失败，请稍后重试', true);
                     });
                 },
 
@@ -6976,6 +7184,8 @@
                 loadOrders() {
                     if (!this.serverToken()) { this.loadLocalOrders(); return Promise.resolve(); }
                     return this.request('/orders').then(list => {
+                        // 来自 MySQL 的订单统一打标记：后续支付/取消/退款/删除都走后端接口
+                        (list || []).forEach(o => { o.serverOrder = true; });
                         this.orders = this.applyOrderMeta(list);
                         this.mergeFeatureOrders();
                         this.markMode(true);
@@ -7684,7 +7894,8 @@
                     // 已登录时自动填充联系人
                     if (this.currentUser) {
                         this.bookingForm.name = this.currentUser.nickname || this.currentUser.username;
-                        if (this.currentUser.phone) this.bookingForm.phone = this.currentUser.phone;
+                        // 接口回传的手机号是掩码（138****5678），填进表单既不能通过校验也不能下单，只填完整号码
+                        if (this.isPlainPhone(this.currentUser.phone)) this.bookingForm.phone = this.currentUser.phone;
                     }
 
                     // 默认选中第一个选项
@@ -7807,7 +8018,78 @@
                     };
 
                     this.closeBooking();
+                    // 「提交订单」与「支付」拆成两步：先落一条待支付订单把库存锁住，
+                    // 再进收银台。以前是点一次按钮就同时完成下单和置为已支付，
+                    // 中途关掉页面既没有订单也没有支付记录，库存却被扣了。
+                    this.placeOrder();
+                },
+
+                /**
+                 * 生成待支付订单（后端模式写入 MySQL，演示数据/后端不可用走本地），
+                 * 成功后才打开收银台并开始支付倒计时。
+                 */
+                placeOrder() {
+                    const info = this.orderInfo;
+                    // 特色体验活动、国际/港澳台航班为前端演示数据，MySQL 无对应记录（itemId 为非整数随机值）→ 走本地订单
+                    const isActivity = info.type === 'ticket' && info.itemKind === 'activity';
+                    const isIntlFlight = info.type === 'flight' && info.flightScope && info.flightScope !== 'domestic';
+                    if (this.serverMode === true && !isActivity && !isIntlFlight && this.serverToken()) {
+                        this.placeOrderOnServer();
+                        return;
+                    }
+                    this.placeOrderLocal();
+                },
+
+                placeOrderOnServer() {
+                    const info = this.orderInfo;
+                    this.request('/orders', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            type: info.type,
+                            itemId: info.itemId,
+                            choice: info.choiceText,
+                            quantity: info.quantity,
+                            days: info.type === 'hotel' ? this.stayDays : 1,
+                            name: info.passengerName,
+                            phone: info.phone,
+                            title: info.title,
+                            dateText: info.dateText,
+                            // 幂等键沿用页面预生成的订单号：连点两次「提交订单」或网络重试时，
+                            // 后端识别为同一单并返回首单，不会二次锁库存
+                            idemKey: info.orderNo
+                        })
+                    }).then(order => {
+                        // 单价/总价/订单号/截止时间一律以服务端为准（防篡改，也是倒计时的唯一来源）
+                        Object.assign(info, order);
+                        // 标记这笔是 MySQL 里的真单：支付/取消/退款/删除都走后端接口，本地演示单不走
+                        info.serverOrder = true;
+                        // 后台标签页里 setInterval 会被浏览器降频（可低至每分钟一次），
+                        // 心跳的 nowTick 可能已经落后几十秒，直接拿去算倒计时会多显示一分钟
+                        this.nowTick = Date.now();
+                        this.deductLocalStock(info);
+                        // 待支付单立刻进列表：用户不付款直接关掉收银台时，订单中心也要能看到它并继续支付
+                        if (!this.orders.some(o => o.orderNo === info.orderNo)) this.orders.unshift(info);
+                        this.showConfirmModal = true;
+                        this.showNotification('订单已提交，请在 ' + this.remainText(info) + ' 内完成支付，超时自动取消');
+                    }).catch(e => {
+                        this.showNotification(e.message || '提交订单失败，请稍后重试', true);
+                    });
+                },
+
+                // 本地演示模式的待支付订单：超时判定由页面心跳负责（后端定时任务不在）
+                placeOrderLocal() {
+                    const info = this.orderInfo;
+                    info.status = '待支付';
+                    info.serverOrder = false;
+                    this.nowTick = Date.now();
+                    info.payExpireMs = this.nowTick + this.localPayWindowMin * 60000;
+                    info.payDeadline = new Date(info.payExpireMs).toLocaleString();
+                    this.deductLocalStock(info);
+                    this.orders.unshift(info);
+                    this.saveLocalOrders();
                     this.showConfirmModal = true;
+                    this.showNotification('订单已提交（本地演示），请在 ' + this.remainText(info) + ' 内完成支付');
                 },
 
                 closeConfirm() {
@@ -7841,19 +8123,44 @@
                     this.doPay();
                 },
 
-                // 渠道校验通过 → 真正提交订单
+                // 渠道校验通过 → 把待支付订单置为已支付
                 doPay() {
                     this.payVerifyShow = false;
                     this.payVerified = false;
                     // 锁定本次实付渠道，写入订单便于订单中心展示
                     this.orderInfo.payKey = this.payChannel;
                     this.orderInfo.payText = this.payChannelName;
-                    // 后端模式：服务端计价 + 扣库存（防篡改、余票不足会被拒绝）
-                    // 特色体验活动、国际/港澳台航班为前端演示数据，MySQL 无对应记录（itemId 为非整数随机值）→ 走本地订单
-                    const isActivity = this.orderInfo.type === 'ticket' && this.orderInfo.itemKind === 'activity';
-                    const isIntlFlight = this.orderInfo.type === 'flight' && this.orderInfo.flightScope && this.orderInfo.flightScope !== 'domestic';
-                    if (this.serverMode && !isActivity && !isIntlFlight) {
-                        this.payOrderOnServer();
+                    this.submitPayment();
+                },
+
+                /**
+                 * 支付这一步只改状态，不再创建订单（订单在「提交订单」时已经落库并锁库存）。
+                 * 后端模式：POST /api/orders/{no}/pay，由服务端校验归属、状态和是否超时；
+                 * 本地模式：就地翻状态并写回 localStorage。
+                 */
+                submitPayment() {
+                    const info = this.orderInfo;
+                    if (this.isServerOrder(info) && this.serverToken()) {
+                        this.request('/orders/' + encodeURIComponent(info.orderNo) + '/pay', { method: 'POST' })
+                            .then(updated => {
+                                Object.assign(info, updated || {});
+                                // 付完钱就不再是「待支付」，把截止时刻清掉，倒计时和心跳都不会再碰它
+                                if (info.status !== '待支付') info.payExpireMs = null;
+                                info.payKey = this.payChannel;
+                                info.payText = this.payChannelName;
+                                if (!this.orders.some(o => o.orderNo === info.orderNo)) this.orders.unshift(info);
+                                this.saveOrderMeta(info);
+                                this.closeConfirm();
+                                this.showSuccessModal = true;
+                                this.showNotification('支付成功！（订单已存入 MySQL）');
+                            })
+                            .catch(e => {
+                                // 超时被服务端取消：把本地这条也标掉，避免列表里还挂着「待支付」
+                                if (e && /超时/.test(e.message)) {
+                                    this.loadOrders();
+                                }
+                                this.showNotification(e.message || '支付失败，请稍后重试', true);
+                            });
                         return;
                     }
                     this.payOrderLocal();
@@ -7892,45 +8199,9 @@
                     this.payVerifyShow = false;
                 },
 
-                payOrderOnServer() {
-                    const info = this.orderInfo;
-                    // 服务端不返回支付渠道，先记下再回填，避免被服务端字段覆盖
-                    const payText = info.payText, payKey = info.payKey;
-                    this.request('/orders', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                            type: info.type,
-                            itemId: info.itemId,
-                            choice: info.choiceText,
-                            quantity: info.quantity,
-                            days: info.type === 'hotel' ? this.stayDays : 1,
-                            name: info.passengerName,
-                            phone: info.phone,
-                            title: info.title,
-                            dateText: info.dateText
-                        })
-                    }).then(order => {
-                        // 以服务端计价的单价/总价/订单号为准，同步回 orderInfo 保证成功弹窗与 MySQL 入库一致
-                        Object.assign(info, order);
-                        info.payText = payText;
-                        info.payKey = payKey;
-                        this.orders.unshift(Object.assign({}, info, {
-                            typeName: info.typeName,
-                            titleLabel: info.titleLabel,
-                            choiceLabel: info.choiceLabel
-                        }));
-                        this.deductLocalStock(info);
-                        this.closeConfirm();
-                        this.showSuccessModal = true;
-                        this.showNotification('支付成功！（订单已存入 MySQL）');
-                    }).catch(e => {
-                        this.closeConfirm();
-                        this.showNotification(e.message || '下单失败，请稍后重试', true);
-                    });
-                },
-
                 // 本地列表同步扣减余票（展示与服务端一致）
+                // 分支要和 restoreLocalStock 一一对应：以前这里漏了 hotel，
+                // 酒店单下单不减、取消却加回去，页面上的余房数一路虚高
                 deductLocalStock(info) {
                     if (info.type === 'train') {
                         const train = this.trains.find(t => t.id === info.itemId);
@@ -7944,6 +8215,12 @@
                             const cabin = flight.cabins.find(c => c.name === info.choiceText);
                             if (cabin) cabin.count = Math.max(0, cabin.count - info.quantity);
                         }
+                    } else if (info.type === 'hotel') {
+                        const hotel = this.hotels.find(h => h.id === info.itemId);
+                        if (hotel) {
+                            const room = (hotel.rooms || []).find(r => r.name === info.choiceText);
+                            if (room) room.count = Math.max(0, (room.count || 0) - info.quantity);
+                        }
                     } else if (info.type === 'bus') {
                         const bus = this.buses.find(b => b.id === info.itemId);
                         if (bus) bus.seats = Math.max(0, bus.seats - info.quantity);
@@ -7953,15 +8230,15 @@
                     }
                 },
 
+                // 本地演示模式的支付：把已经生成的待支付订单翻成已支付（订单在 placeOrderLocal 里已入列并扣减余票）
                 payOrderLocal() {
-                    // 按类型扣减余票/余座
-                    this.deductLocalStock(this.orderInfo);
-
-                    // 保存订单
-                    this.orders.unshift({ ...this.orderInfo, status: '已支付', payTime: new Date().toLocaleString() });
-                    // 隐私模式或配额写满时会抛异常，不能让它挡住后面的支付成功弹窗
-                    try { localStorage.setItem('travelOrders', JSON.stringify(this.orders)); } catch (e) {}
-
+                    const info = this.orderInfo;
+                    info.payTime = new Date().toLocaleString();
+                    info.payExpireMs = null;
+                    this.applyFlags(info, '已支付');
+                    const hit = this.orders.find(o => o.orderNo === info.orderNo);
+                    if (hit) Object.assign(hit, info); else this.orders.unshift(info);
+                    this.saveLocalOrders();
                     this.closeConfirm();
                     this.showSuccessModal = true;
                     this.showNotification('支付成功！');
@@ -7980,19 +8257,268 @@
                     this.showOrderModal = false;
                 },
 
-                clearOrders() {
-                    if (this.serverMode === true) {
-                        // 后端要求 ?confirm=YES 才执行，且只清空当前登录账号的订单
-                        this.request('/orders?confirm=YES', { method: 'DELETE' }).then(() => {
-                            this.orders = [];
-                            try { localStorage.removeItem('travelOrders'); } catch (e) { }
-                            this.showNotification('本人订单已清空（MySQL）');
-                        }).catch(err => this.showNotification((err && err.message) || '清空订单失败', true));
+                // 状态徽标配色：后端 travel_order.status 四态（待支付/已支付/已取消/已退款）
+                orderStatusClass(order) {
+                    const s = order.status || '已支付';
+                    if (s === '已取消') return 'cancelled';
+                    if (s === '已退款') return 'refunded';
+                    if (s === '待支付' || s === '抢票中') return 'pending';
+                    return 'paid';
+                },
+
+                /**
+                 * 四个按钮的显示条件。
+                 * 后端订单带 payable/cancellable/refundable/deletable 标志（服务端按归属 + 状态算好），
+                 * 前端只认标志，避免「点了才知道没权限」；加 user_id 之前的无主历史订单四个标志都是 false。
+                 * 本地演示订单没有这些字段，退化成按状态判断。
+                 */
+                flagOr(order, name, fallback) {
+                    return order[name] === undefined ? fallback : !!order[name];
+                },
+
+                /**
+                 * 这条订单是否归 MySQL 管（决定动作走后端接口还是就地改本地数据）。
+                 * 优先看显式 serverOrder 标记：后端返回的列表、后端下单成功回填的订单都是 true，
+                 * 本地演示单与特色功能单是 false。标记缺失（早于本次改动存在的历史数据）时，
+                 * 用只有后端才会下发的字段兜底，避免误把真单当演示单就地改状态。
+                 */
+                isServerOrder(order) {
+                    if (!order) return false;
+                    if (order.serverOrder !== undefined) return !!order.serverOrder;
+                    return order.payable !== undefined || order.payDeadline !== undefined
+                        || order.payExpireMs !== undefined;
+                },
+                canPayOrder(order) {
+                    return this.flagOr(order, 'payable', (order.status || '已支付') === '待支付');
+                },
+                canCancelOrder(order) {
+                    return this.flagOr(order, 'cancellable', (order.status || '已支付') === '待支付');
+                },
+                canRefundOrder(order) {
+                    return this.flagOr(order, 'refundable', (order.status || '已支付') === '已支付');
+                },
+                canDeleteOrder(order) {
+                    return this.flagOr(order, 'deletable', ['已取消', '已退款'].indexOf(order.status) >= 0);
+                },
+
+                // 订单卡片右下角的时间：按状态取对应时间字段，避免「已退款」的单子还挂着支付时间
+                orderTimeText(order) {
+                    const s = order.status || '已支付';
+                    if (s === '已取消') return order.cancelTime || '';
+                    if (s === '已退款') return order.refundTime || order.payTime || '';
+                    if (s === '待支付') return order.payDeadline ? ('支付截止 ' + order.payDeadline) : '';
+                    return order.payTime || '';
+                },
+
+                // 从订单中心回到收银台继续支付：把这笔待支付订单重新装进 orderInfo
+                resumePay(order) {
+                    if (!this.ensureLogin('支付订单')) return;
+                    if (this.remainMs(order) === 0) {
+                        this.showNotification('该订单支付超时，请重新下单', true);
+                        this.expirePendingOrders([order]);
                         return;
                     }
-                    this.orders = [];
-                    localStorage.removeItem('travelOrders');
-                    this.showNotification('订单记录已清空');
+                    this.orderInfo = order;
+                    this.payChannel = '';
+                    this.payVerified = false;
+                    this.payVerifyShow = false;
+                    this.showOrderModal = false;
+                    this.showConfirmModal = true;
+                },
+
+                // 取消待支付订单：后端模式下服务端改状态并回补库存
+                cancelOrder(order) {
+                    this.orderAction(order, 'cancel', '确定取消订单 ' + order.orderNo + ' 吗？取消后锁定的余票/库存会立即释放。',
+                        '订单已取消，库存已释放');
+                },
+
+                // 退款：已支付订单 → 已退款（演示项目没有真实资金通道，只走状态与库存）
+                refundOrder(order) {
+                    this.orderAction(order, 'refund', '确定为订单 ' + order.orderNo + ' 申请退款吗？退款后订单状态变为「已退款」，库存释放。',
+                        '退款已受理，订单状态：已退款');
+                },
+
+                // 删除：只删已取消/已退款的记录，服务端会再校验一次状态
+                deleteOrder(order) {
+                    this.orderAction(order, 'delete', '确定删除订单 ' + order.orderNo + ' 的记录吗？删除后列表中不再可见。',
+                        '订单记录已删除');
+                },
+
+                /**
+                 * 订单动作的统一执行：action ∈ cancel|refund|delete。
+                 * 后端订单发对应接口（本地列表按返回的新状态同步 + 回补页面余票）；
+                 * 本地演示订单就地改状态。四个按钮共用一套置灰、确认与错误处理。
+                 */
+                orderAction(order, action, confirmText, doneText) {
+                    if (!this.ensureLogin(action === 'delete' ? '删除订单' : '操作订单')) return;
+                    if (!window.confirm(confirmText)) return;
+                    const token = this.serverToken();
+                    this.busyOrderNo = order.orderNo;
+                    const finish = () => { this.busyOrderNo = ''; };
+                    if (token && this.isServerOrder(order)) {
+                        const method = action === 'delete' ? 'DELETE' : 'POST';
+                        const path = action === 'delete'
+                            ? '/orders/' + encodeURIComponent(order.orderNo)
+                            : '/orders/' + encodeURIComponent(order.orderNo) + '/' + action;
+                        this.request(path, { method: method }).then(res => {
+                            if (action === 'delete') {
+                                this.orders = this.orders.filter(o => o.orderNo !== order.orderNo);
+                            } else {
+                                // 服务端返回的是这条单的最新视图，状态与四个动作标志都以它为准
+                                Object.assign(order, res || {});
+                                if (order.status !== '待支付') order.payExpireMs = null;
+                                this.restoreLocalStock(order);
+                            }
+                            this.saveOrderMeta(order);
+                            this.showNotification(typeof res === 'string' ? res : doneText);
+                        }).catch(err => {
+                            this.showNotification((err && err.message) || '操作失败，请稍后重试', true);
+                            this.loadOrders();
+                        }).finally(finish);
+                        return;
+                    }
+                    // 本地演示订单
+                    if (action === 'delete') {
+                        this.orders = this.orders.filter(o => o.orderNo !== order.orderNo);
+                    } else if (action === 'refund') {
+                        this.$set(order, 'refundTime', new Date().toLocaleString());
+                        this.$set(order, 'refundAmount', order.totalPrice);
+                        this.applyFlags(order, '已退款');
+                        this.restoreLocalStock(order);
+                    } else {
+                        this.applyLocalCancel(order);
+                    }
+                    this.saveLocalOrders();
+                    this.saveOrderMeta(order);
+                    this.showNotification(doneText + '（本地演示数据）');
+                    finish();
+                },
+
+                // 本地模式下把一单标记为已取消；不删行，状态流转要看得见
+                applyLocalCancel(order) {
+                    order.cancelTime = new Date().toLocaleString();
+                    order.payExpireMs = null;
+                    this.applyFlags(order, '已取消');
+                    this.restoreLocalStock(order);
+                },
+
+                // 与 deductLocalStock 对称：取消后把页面上的余票/余座加回去
+                restoreLocalStock(info) {
+                    if (!info || !info.itemId) return;
+                    const qty = parseInt(info.quantity) || 1;
+                    if (info.type === 'train') {
+                        const train = this.trains.find(t => t.id === info.itemId);
+                        if (train) {
+                            const seat = train.seats.find(s => s && s.name === info.choiceText);
+                            if (seat) seat.count = (seat.count || 0) + qty;
+                        }
+                    } else if (info.type === 'flight') {
+                        const flight = this.flights.find(f => f.id === info.itemId);
+                        if (flight) {
+                            const cabin = flight.cabins.find(c => c.name === info.choiceText);
+                            if (cabin) cabin.count = (cabin.count || 0) + qty;
+                        }
+                    } else if (info.type === 'hotel') {
+                        const hotel = this.hotels.find(h => h.id === info.itemId);
+                        if (hotel) {
+                            const room = (hotel.rooms || []).find(r => r.name === info.choiceText);
+                            if (room) room.count = (room.count || 0) + qty;
+                        }
+                    } else if (info.type === 'bus') {
+                        const bus = this.buses.find(b => b.id === info.itemId);
+                        if (bus) bus.seats = (bus.seats || 0) + qty;
+                    } else if (info.type === 'ship') {
+                        const ship = this.ships.find(s => s.id === info.itemId);
+                        if (ship) ship.seats = (ship.seats || 0) + qty;
+                    }
+                },
+
+                saveLocalOrders() {
+                    try { localStorage.setItem('travelOrders', JSON.stringify(this.orders)); } catch (e) { }
+                    this.persistFeatureOrders();
+                },
+
+                // ==================== 支付倒计时 ====================
+                // 剩余毫秒；后端返回的 payExpireMs 是 pay_deadline 的 epoch 毫秒，没有则返回 -1（不适用）
+                remainMs(order) {
+                    if (!order || !order.payExpireMs) return -1;
+                    return Math.max(0, Number(order.payExpireMs) - this.nowTick);
+                },
+
+                // mm:ss 文本，收银台和订单列表共用
+                remainText(order) {
+                    const ms = this.remainMs(order);
+                    if (ms < 0) return '';
+                    const s = Math.floor(ms / 1000);
+                    const m = Math.floor(s / 60);
+                    return (m < 10 ? '0' : '') + m + ':' + (s % 60 < 10 ? '0' : '') + (s % 60);
+                },
+
+                // 心跳：推进 nowTick，顺带把已过期的待支付订单落地成已取消
+                tickOrders() {
+                    this.nowTick = Date.now();
+                    const stale = this.orders.filter(o => o.status === '待支付' && o.payExpireMs && Number(o.payExpireMs) <= this.nowTick);
+                    if (stale.length) this.expirePendingOrders(stale);
+                    if (this.showConfirmModal && this.orderInfo && this.orderInfo.status === '待支付'
+                        && this.remainMs(this.orderInfo) === 0) {
+                        this.closeConfirm();
+                    }
+                },
+
+                /**
+                 * 前端就地改状态时，同步把后端下发的四个动作标志按新状态重算。
+                 * 不这么做的话，页面上刚标成「已取消」的单子还顶着 payable=true，
+                 * 继续显示「去支付」按钮，点了才被服务端拒绝。
+                 */
+                applyFlags(order, status) {
+                    const pending = status === '待支付';
+                    const paid = status === '已支付';
+                    // 用 $set：本地演示单/历史数据上没有这四个键，直接赋值不会触发视图更新
+                    this.$set(order, 'status', status);
+                    this.$set(order, 'payable', pending);
+                    this.$set(order, 'cancellable', pending);
+                    this.$set(order, 'refundable', paid);
+                    this.$set(order, 'deletable', status === '已取消' || status === '已退款');
+                },
+
+                /**
+                 * 超时未支付的订单在页面上就地取消。
+                 * MySQL 侧由 OrderExpiryTask 定时任务负责（默认每分钟一次），这里只保证用户不必盯着 00:00；
+                 * 不立刻回头拉列表——服务端还没扫到时仍会返回「待支付」，反而把过期单又摆回来。
+                 */
+                expirePendingOrders(list) {
+                    list.forEach(o => {
+                        o.cancelTime = new Date().toLocaleString();
+                        o.payExpireMs = null;
+                        this.applyFlags(o, '已取消');
+                        this.restoreLocalStock(o);
+                    });
+                    if (!this.serverToken()) this.saveLocalOrders();
+                    this.showNotification('订单 ' + list[0].orderNo + ' 超时未支付，已自动取消并释放库存', true);
+                },
+
+                /**
+                 * 「取消全部待支付」。
+                 * 以前这条路径是物理删除（DELETE），库存不会回来也没有留痕；
+                 * 现在统一改成状态流转：后端 cancelAllPending 只处理本人的待支付单，
+                 * 已支付单要走退款、已取消/已退款单要留痕，都不在批量范围内。
+                 */
+                clearOrders() {
+                    if (!this.ensureLogin('取消订单')) return;
+                    const list = this.pendingOrders;
+                    if (!list.length) { this.showNotification('没有待支付订单', true); return; }
+                    if (!window.confirm('确定取消全部 ' + list.length + ' 条待支付订单吗？取消后锁定的余票/库存会回补，订单记录保留在列表中。')) return;
+                    if (this.serverToken()) {
+                        // 后端要求 ?confirm=YES 显式确认，且只处理当前登录账号本人的订单
+                        this.request('/orders?confirm=YES', { method: 'DELETE' }).then(msg => {
+                            this.showNotification(typeof msg === 'string' ? msg : '本人待支付订单已全部取消（MySQL）');
+                            return this.loadOrders();
+                        }).catch(err => this.showNotification((err && err.message) || '取消订单失败', true));
+                        return;
+                    }
+                    list.forEach(o => this.applyLocalCancel(o));
+                    this.saveLocalOrders();
+                    this.showNotification('本地演示订单已全部取消，库存已回补');
                 },
 
                 // ==================== 通用 ====================
@@ -8281,6 +8807,14 @@
                 // ESC 关闭弹窗
                 window.addEventListener('keydown', this.handleKeydown);
 
+                // 待支付倒计时：1 秒一跳，只驱动 nowTick（订单行与收银台的剩余时间都由它算出来）。
+                // 归零时后端定时任务才是最终裁决者，这里只是先把页面状态同步过来，避免用户看到「待支付 00:00」
+                this.payTickTimer = setInterval(() => this.tickOrders(), 1000);
+                // 切回标签页时立刻补一跳：隐藏页面的定时器会被浏览器降频到每分钟一次，
+                // 不补这一下，用户回到收银台看到的剩余时间会停在离开时的数字上
+                this.payVisibilityTick = () => { if (!document.hidden) this.tickOrders(); };
+                document.addEventListener('visibilitychange', this.payVisibilityTick);
+
                 // 动效与动态数据（顶栏收缩 / 预订播报 / 倒计时 / 地图热推 / 滚动渐显）
                 this.initEffects();
             },
@@ -8295,6 +8829,8 @@
             },
             beforeDestroy() {
                 window.removeEventListener('keydown', this.handleKeydown);
+                if (this.payTickTimer) clearInterval(this.payTickTimer);
+                if (this.payVisibilityTick) document.removeEventListener('visibilitychange', this.payVisibilityTick);
                 this.destroyEffects();
             }
         });
