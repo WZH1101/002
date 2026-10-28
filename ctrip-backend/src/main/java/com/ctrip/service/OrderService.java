@@ -30,10 +30,10 @@ public class OrderService {
 
     /**
      * 创建订单。请求：{type, itemId, choice, quantity, days, name, phone, title, dateText}
-     * 单价/总价以服务端计算为准
+     * 单价/总价以服务端计算为准；userId 为下单人（会话用户），写入订单便于按归属查询。
      */
     @Transactional
-    public Map<String, Object> createOrder(Map<String, Object> req) {
+    public Map<String, Object> createOrder(Map<String, Object> req, long userId) {
         String type = str(req.get("type"));
         String choice = str(req.get("choice"));
         String name = str(req.get("name"));
@@ -63,9 +63,9 @@ public class OrderService {
         String title = str(req.getOrDefault("title", choice));
         String dateText = str(req.getOrDefault("dateText", ""));
 
-        jdbc.update("INSERT INTO travel_order(order_no,type,item_id,title,date_text,choice_text,quantity,unit_price,total_price,contact_name,phone,status,pay_time) "
-                        + "VALUES(?,?,?,?,?,?,?,?,?,?,?,?,NOW())",
-                orderNo, type, itemId, title, dateText, choice, qty,
+        jdbc.update("INSERT INTO travel_order(order_no,type,item_id,user_id,title,date_text,choice_text,quantity,unit_price,total_price,contact_name,phone,status,pay_time) "
+                        + "VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,NOW())",
+                orderNo, type, itemId, userId, title, dateText, choice, qty,
                 price.get("unitPrice"), price.get("totalPrice"), name.trim(), phone, "已支付");
 
         Map<String, Object> order = new LinkedHashMap<>();
@@ -86,11 +86,18 @@ public class OrderService {
         return order;
     }
 
-    /** 订单列表（最新在前） */
-    public List<Map<String, Object>> listOrders() {
+    /**
+     * 订单列表（最新在前）：本人下的单 + 加 user_id 列之前的历史订单。
+     *
+     * <p>把 NULL 一并返回是有意的：老订单无从判断归属，若按归属严格过滤，
+     * 用户会在升级后突然「丢单」。替家人朋友订票时 contact phone 是乘机人的，
+     * 所以归属只看 user_id，绝不能用 phone 去筛。
+     */
+    public List<Map<String, Object>> listOrders(long userId) {
         List<Map<String, Object>> rows = jdbc.queryForList(
                 "SELECT order_no,type,item_id,title,date_text,choice_text,quantity,unit_price,total_price,contact_name,phone,status,"
-                        + "DATE_FORMAT(pay_time,'%Y/%m/%d %H:%i:%s') AS pay_time FROM travel_order ORDER BY id DESC LIMIT 200");
+                        + "DATE_FORMAT(pay_time,'%Y/%m/%d %H:%i:%s') AS pay_time FROM travel_order"
+                        + " WHERE user_id = ? OR user_id IS NULL ORDER BY id DESC LIMIT 200", userId);
         return rows.stream().map(OrderService::toOrderView).toList();
     }
 
@@ -113,8 +120,14 @@ public class OrderService {
         return o;
     }
 
-    public void clearOrders() {
-        jdbc.update("DELETE FROM travel_order");
+    /**
+     * 清空当前用户的订单，返回删除条数。
+     * 只删本人的：此前这条 SQL 是无条件 DELETE FROM travel_order，
+     * 任何登录用户点一下就能连别人的订单一起删光。
+     * 历史遗留的 user_id 为 NULL 的订单不归任何人，保留给人工处理，避免被误删。
+     */
+    public int clearOrders(long userId) {
+        return jdbc.update("DELETE FROM travel_order WHERE user_id = ?", userId);
     }
 
     private static String str(Object o) {

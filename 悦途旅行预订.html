@@ -7925,11 +7925,11 @@
 
                 clearOrders() {
                     if (this.serverMode === true) {
-                        // 后端要求 ?confirm=YES 才执行，且该操作清空整张订单表
+                        // 后端要求 ?confirm=YES 才执行，且只清空当前登录账号的订单
                         this.request('/orders?confirm=YES', { method: 'DELETE' }).then(() => {
                             this.orders = [];
                             try { localStorage.removeItem('travelOrders'); } catch (e) { }
-                            this.showNotification('订单记录已清空（MySQL）');
+                            this.showNotification('本人订单已清空（MySQL）');
                         }).catch(err => this.showNotification((err && err.message) || '清空订单失败', true));
                         return;
                     }

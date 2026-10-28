@@ -80,7 +80,8 @@ public class IndexController {
                       <li><code>GET /api/trains?from=北京&amp;to=上海</code> 火车票搜索</li>
                       <li><code>GET /api/flights?from=北京&amp;to=上海</code> 机票搜索</li>
                       <li><code>GET /api/buses?from=北京&amp;to=天津</code> 汽车票搜索</li>
-                      <li><code>POST/GET/DELETE /api/orders</code> 下单 / 订单列表 / 清空订单</li>
+                      <li><code>POST /api/auth/register|login|logout</code>、<code>GET /api/auth/me</code> 账号与登录态</li>
+                      <li><code>POST/GET/DELETE /api/orders</code> 下单 / 订单列表 / 清空订单 · <b>需登录，只操作本人订单</b></li>
                     </ul>
                     <div class="sub">提示：前端页面请直接打开本地文件「悦途旅行预订.html」，页面会自动调用以上接口。</div>
                     <a class="btn" href="/api/hotels?city=%E5%8C%97%E4%BA%AC" target="_blank">测试酒店接口 →</a>

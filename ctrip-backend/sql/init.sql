@@ -51,12 +51,14 @@ CREATE TABLE travel_order (
   id BIGINT AUTO_INCREMENT PRIMARY KEY,
   order_no VARCHAR(32) NOT NULL UNIQUE,
   type VARCHAR(16) NOT NULL, item_id BIGINT,
+  user_id BIGINT,
   title VARCHAR(256), date_text VARCHAR(128), choice_text VARCHAR(64),
   quantity INT NOT NULL, unit_price DECIMAL(10,2), total_price DECIMAL(10,2),
   contact_name VARCHAR(32), phone VARCHAR(16),
   status VARCHAR(16) DEFAULT '已支付', pay_time DATETIME,
   create_time DATETIME DEFAULT CURRENT_TIMESTAMP,
-  KEY idx_order_type (type)
+  KEY idx_order_type (type),
+  KEY idx_order_user (user_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- 真实酒店数据（名称/星级/价格参照平台公开价）

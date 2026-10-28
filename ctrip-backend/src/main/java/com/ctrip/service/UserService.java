@@ -116,6 +116,7 @@ public class UserService {
 
         Map<String, Object> out = new LinkedHashMap<>();
         out.put("token", token);
+        out.put("id", row.get("id"));
         out.put("username", row.get("username"));
         out.put("nickname", row.get("nickname"));
         out.put("phone", row.get("phone"));
@@ -134,16 +135,32 @@ public class UserService {
         return true;
     }
 
+    /**
+     * 会话身份。供需要「谁做的」的接口使用（如写入订单归属人）。
+     * 与 {@link #me(String)} 的差别：不抛异常，令牌无效时返回 null，
+     * 便于控制器在拦截器之后安全地二次读取——万一令牌恰好在两次读取之间过期，
+     * 也只是这一次请求被拒，不会变成 500。
+     */
+    public record AuthUser(long id, String username, String nickname, String phone) {}
+
+    public AuthUser findAuthUser(String token) {
+        if (token == null || token.isEmpty()) return null;
+        Session s = sessions.get(token);
+        if (s == null || s.expireAt().isBefore(Instant.now())) return null;
+        return new AuthUser(s.userId(), s.username(), s.nickname(), s.phone());
+    }
+
     public Map<String, Object> me(String token) {
-        Session s = token == null ? null : sessions.get(token);
-        if (s == null || s.expireAt().isBefore(Instant.now())) {
-            if (s != null) sessions.remove(token);
+        AuthUser u = findAuthUser(token);
+        if (u == null) {
+            if (token != null) sessions.remove(token);
             throw new IllegalStateException("登录已过期，请重新登录");
         }
         Map<String, Object> out = new LinkedHashMap<>();
-        out.put("username", s.username());
-        out.put("nickname", s.nickname());
-        out.put("phone", s.phone());
+        out.put("id", u.id());
+        out.put("username", u.username());
+        out.put("nickname", u.nickname());
+        out.put("phone", u.phone());
         return out;
     }
 
