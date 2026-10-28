@@ -1526,6 +1526,19 @@
         .pay-note { display: flex; gap: 6px; margin-top: 12px; font-size: 12px; line-height: 1.7; color: #8a94a6; }
         .pay-note i { color: #2577e3; margin-top: 3px; }
 
+        /* 未登录下单拦截：预订弹窗顶部提示条 */
+        .login-gate {
+            display: flex; align-items: center; gap: 10px; margin-bottom: 14px;
+            padding: 10px 14px; border-radius: 8px; font-size: 13px; color: #8c5a00;
+            background: #fff7e6; border: 1px solid #ffd591;
+        }
+        .login-gate i { color: #e6a23c; font-size: 15px; }
+        .login-gate-btn {
+            margin-left: auto; flex: none; background: #2577e3; color: #fff; border: none;
+            border-radius: 6px; padding: 6px 14px; font-size: 12px; cursor: pointer;
+        }
+        .login-gate-btn:hover { background: #1a5fc4; }
+
         /* 预订弹窗内的支付方式选择 */
         .pay-picks { display: flex; flex-wrap: wrap; gap: 8px; }
         .pay-pick {
@@ -3367,6 +3380,12 @@
                     <button class="modal-close" @click="closeBooking">×</button>
                 </div>
                 <div class="modal-body">
+                    <!-- 未登录不挡浏览与填写，只在提交「确认预订」时拦下；这里先给提示，免得填完才知道 -->
+                    <div class="login-gate" v-if="!currentUser">
+                        <i class="fas fa-user-lock"></i>
+                        <span>登录后才能提交订单，已填写的内容会保留。</span>
+                        <button class="login-gate-btn" @click="openAuth('login')">立即登录</button>
+                    </div>
                     <!-- 酒店信息 + 房型 -->
                     <div class="order-info" v-if="searchTab === 'hotel' && selectedItem">
                         <div class="order-info-row">
@@ -6758,10 +6777,34 @@
                     this.showAuthModal = true;
                 },
 
+                // 是否已登录：本地演示模式的 local- 令牌同样算登录（订单只落 localStorage）
+                isLogged() {
+                    return !!this.currentUser;
+                },
+
+                /**
+                 * 下单前的登录门禁。未登录时不报错、不丢表单，直接弹出登录面板，
+                 * 登录成功后回到原弹窗继续（联系人由 authResult 自动补齐）。
+                 */
+                ensureLoginForOrder() {
+                    if (this.isLogged()) return true;
+                    this.showNotification('请先登录后再下单', true);
+                    this.openAuth('login');
+                    return false;
+                },
+
                 authResult(user) {
                     this.currentUser = user;
                     localStorage.setItem('ctripAuth', JSON.stringify(user));
                     this.showAuthModal = false;
+                    // 未登录时点了「确认预订」→ 登录面板盖在预订弹窗上；登录成功后顺手补齐空的联系人，
+                    // 用户回到原弹窗再点一次即可，不必重填
+                    if (this.showBookingModal && this.bookingForm) {
+                        if (!String(this.bookingForm.name || '').trim()) {
+                            this.bookingForm.name = user.nickname || user.username || '';
+                        }
+                        if (!this.bookingForm.phone && user.phone) this.bookingForm.phone = user.phone;
+                    }
                     // 登录拿到了后端令牌，此时才有权读 /api/orders，重新拉一次真实订单
                     if (this.serverToken()) this.loadOrders();
                 },
@@ -7663,6 +7706,8 @@
                 },
 
                 confirmBooking() {
+                    // 未登录不允许下单：弹出登录面板，预订表单原样保留（含已填联系人）
+                    if (!this.ensureLoginForOrder()) return;
                     // 验证表单
                     if (!this.bookingForm.name.trim()) {
                         this.showNotification('请输入联系人姓名', true);
@@ -7760,18 +7805,20 @@
                 },
 
                 payOrder() {
+                    // 登录门禁兜底：正常到不了这里（confirmBooking 已拦），
+                    // 万一登录态在确认弹窗里被别的请求判为失效，也不会绕过校验
+                    if (!this.ensureLoginForOrder()) return;
+                    // 后端模式下订单要写入 MySQL，而 /api/orders 只认服务端签发的令牌：
+                    // 本地登录态（local- 前缀）服务器不认，需改用真实账号登录
+                    if (this.serverMode === true && !this.serverToken()) {
+                        this.showNotification('后端模式下本地登录态无效，请重新登录', true);
+                        this.openAuth('login');
+                        return;
+                    }
                     // 未选支付方式时不进入校验环节，直接引导用户去选
                     if (!this.payChannel) {
                         this.showNotification('请先选择支付方式', true);
                         this.openPay('');
-                        return;
-                    }
-                    // 后端模式下订单要写入 MySQL，而 /api/orders 已要求登录态：
-                    // 先引导登录，避免用户走完“支付”流程才收到 401
-                    if (this.serverMode === true && !this.serverToken()) {
-                        this.showNotification('请先登录后再提交订单', true);
-                        this.authTab = 'login';
-                        this.showAuthModal = true;
                         return;
                     }
                     // 先过渠道校验（扫码 / 卡号后四位 / 短信验证码），通过后再提交订单
