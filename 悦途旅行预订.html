@@ -6754,6 +6754,14 @@
 
                 // ==================== 企业商旅 ====================
                 submitBiz() {
+                    // 与下单一致的登录门禁：未登录先弹登录面板，已填的企业信息保留
+                    if (!this.ensureLogin('提交认证')) return;
+                    // 商旅认证必须走后端的 /api/biztravel，本地登录态（local- 令牌）服务端不认
+                    if (!this.serverToken()) {
+                        this.showNotification('企业商旅需用平台账号登录（本地登录态后端不认）', true);
+                        this.openAuth('login');
+                        return;
+                    }
                     const f = this.bizForm;
                     if (!f.company.trim()) { this.showNotification('请输入企业名称', true); return; }
                     if (!/[0-9A-Z]{18}/.test(f.creditCode.trim())) { this.showNotification('统一社会信用代码需 18 位数字/大写字母', true); return; }
@@ -6783,12 +6791,14 @@
                 },
 
                 /**
-                 * 下单前的登录门禁。未登录时不报错、不丢表单，直接弹出登录面板，
-                 * 登录成功后回到原弹窗继续（联系人由 authResult 自动补齐）。
+                 * 需要登录才能提交的操作的统一门禁（下单、企业商旅认证等）。
+                 * 未登录时不报错、不丢已填内容，直接弹出登录面板；登录成功后回到原处再点一次即可，
+                 * 预订弹窗里的联系人还会由 authResult 自动补齐。
+                 * @param {string} what 操作名称，用于提示文案，缺省为「下单」
                  */
-                ensureLoginForOrder() {
+                ensureLogin(what) {
                     if (this.isLogged()) return true;
-                    this.showNotification('请先登录后再下单', true);
+                    this.showNotification('请先登录后再' + (what || '下单'), true);
                     this.openAuth('login');
                     return false;
                 },
@@ -7707,7 +7717,7 @@
 
                 confirmBooking() {
                     // 未登录不允许下单：弹出登录面板，预订表单原样保留（含已填联系人）
-                    if (!this.ensureLoginForOrder()) return;
+                    if (!this.ensureLogin()) return;
                     // 验证表单
                     if (!this.bookingForm.name.trim()) {
                         this.showNotification('请输入联系人姓名', true);
@@ -7807,7 +7817,7 @@
                 payOrder() {
                     // 登录门禁兜底：正常到不了这里（confirmBooking 已拦），
                     // 万一登录态在确认弹窗里被别的请求判为失效，也不会绕过校验
-                    if (!this.ensureLoginForOrder()) return;
+                    if (!this.ensureLogin()) return;
                     // 后端模式下订单要写入 MySQL，而 /api/orders 只认服务端签发的令牌：
                     // 本地登录态（local- 前缀）服务器不认，需改用真实账号登录
                     if (this.serverMode === true && !this.serverToken()) {
