@@ -2166,6 +2166,104 @@
         /* 改密码面板的说明：提醒改密会吊销全部会话，避免用户以为还能继续用旧登录态 */
         .auth-tip { font-size: 12px; color: #ff7d00; background: #fff8ef; border-radius: 4px; padding: 8px 10px; margin-top: 12px; line-height: 1.6; }
 
+        /* 登录/注册方式子页签（账号密码 / 手机验证码 / 扫码） */
+        .lm-tabs { display: flex; gap: 6px; margin-bottom: 18px; }
+        .lm-tab {
+            flex: 1; text-align: center; padding: 8px 0; font-size: 13px; color: #666; cursor: pointer;
+            border: 1px solid #e3e6eb; border-radius: 6px; transition: all .2s;
+        }
+        .lm-tab:hover { border-color: #9cc4f5; color: #2577e3; }
+        .lm-tab.on { border-color: #2577e3; color: #2577e3; background: #eef5ff; font-weight: bold; }
+        .auth-code-row { display: flex; gap: 8px; }
+        .auth-code-row input { flex: 1; }
+        .auth-send-btn {
+            width: 118px; height: 40px; border: 1px solid #2577e3; background: #fff; color: #2577e3;
+            border-radius: 6px; font-size: 13px; cursor: pointer; flex-shrink: 0;
+        }
+        .auth-send-btn:disabled { color: #999; border-color: #ddd; background: #f5f5f5; cursor: not-allowed; }
+        /* 演示站没有短信网关：后端回显的明文验证码提示条，接真网关后整块不出现 */
+        .auth-demo-code {
+            display: flex; align-items: center; gap: 8px; background: #fffbe8; border: 1px dashed #e6c54a;
+            color: #8a6d1a; border-radius: 6px; padding: 8px 10px; margin-bottom: 12px; font-size: 12px;
+        }
+        .auth-demo-code b { font-size: 18px; letter-spacing: 4px; color: #b8860b; }
+        /* 扫码登录。类名一律带 lm- 前缀：支付弹窗里早就有一套 .qr-box/.qr-code
+           （收款码，svg 被写成 82px、窄屏 66px），同名会互相污染——登录码被压小扫不上，
+           收款码容器被这里的 180px 白框改掉外观。 */
+        .qr-wrap { position: relative; width: 180px; height: 180px; margin: 0 auto; }
+        .lm-qr-box {
+            width: 180px; height: 180px; display: flex; align-items: center; justify-content: center;
+            background: #fff; border: 1px solid #eee; border-radius: 10px; overflow: hidden; box-sizing: border-box;
+        }
+        /* createSvgTag 带 viewBox，直接铺满容器即可：SVG 矢量放大不糊，扫得比 115px 默认尺寸稳 */
+        .lm-qr-box svg { display: block; width: 100%; height: 100%; }
+        .qr-mask {
+            position: absolute; inset: 0; display: flex; flex-direction: column; gap: 8px; align-items: center;
+            justify-content: center; text-align: center; background: rgba(255,255,255,.94); color: #666; font-size: 13px; padding: 0 16px;
+        }
+        .qr-mask .qr-refresh {
+            border: 1px solid #2577e3; color: #2577e3; background: #fff; border-radius: 14px;
+            padding: 5px 14px; font-size: 12px; cursor: pointer;
+        }
+        .qr-mask a { color: #2577e3; word-break: break-all; font-size: 12px; }
+        .qr-status { text-align: center; font-size: 13px; color: #666; margin-top: 12px; min-height: 20px; }
+        .qr-status.ok { color: #1a9c6b; }
+        .qr-fallback { text-align: center; font-size: 12px; color: #999; margin-top: 8px; line-height: 1.8; }
+        .qr-fallback a { color: #2577e3; }
+
+        /* 7×24 客服悬浮窗 */
+        .support-fab {
+            position: fixed; right: 26px; bottom: 96px; width: 56px; height: 56px; border-radius: 50%;
+            background: linear-gradient(135deg, #2577e3, #6a3df5); color: #fff; display: flex; flex-direction: column;
+            align-items: center; justify-content: center; cursor: pointer; box-shadow: 0 6px 20px rgba(37,119,227,.45);
+            z-index: 900; transition: transform .2s;
+        }
+        .support-fab:hover { transform: translateY(-3px); }
+        .support-fab i { font-size: 21px; }
+        .support-fab span { font-size: 9px; letter-spacing: 1px; margin-top: 1px; }
+        .support-fab .sf-dot {
+            position: absolute; top: 2px; right: 2px; width: 10px; height: 10px; border-radius: 50%;
+            background: #3ddc5b; border: 2px solid #fff;
+        }
+        .support-panel {
+            position: fixed; right: 26px; bottom: 162px; width: 340px; max-width: calc(100vw - 40px);
+            background: #fff; border-radius: 12px; box-shadow: 0 10px 34px rgba(0,0,0,.18); z-index: 901;
+            display: flex; flex-direction: column; overflow: hidden;
+        }
+        .sp-head {
+            background: linear-gradient(90deg, #2577e3, #4aa5ff); color: #fff; padding: 13px 16px;
+            display: flex; align-items: center; gap: 10px;
+        }
+        .sp-head .sp-avatar {
+            width: 34px; height: 34px; border-radius: 50%; background: rgba(255,255,255,.22);
+            display: flex; align-items: center; justify-content: center; font-size: 17px; flex-shrink: 0;
+        }
+        .sp-head b { font-size: 14px; display: block; }
+        .sp-head small { font-size: 11px; opacity: .85; }
+        .sp-head .sp-close { margin-left: auto; cursor: pointer; font-size: 18px; opacity: .8; background: none; border: none; color: #fff; }
+        .sp-head .sp-close:hover { opacity: 1; }
+        .sp-msgs { height: 300px; overflow-y: auto; padding: 14px; background: #f5f7fa; display: flex; flex-direction: column; gap: 10px; }
+        .sp-msg { max-width: 82%; padding: 9px 12px; border-radius: 10px; font-size: 13px; line-height: 1.7; word-break: break-word; }
+        .sp-msg.bot { align-self: flex-start; background: #fff; color: #333; box-shadow: 0 1px 4px rgba(0,0,0,.06); }
+        .sp-msg.user { align-self: flex-end; background: #2577e3; color: #fff; border-bottom-right-radius: 3px; }
+        .sp-msg .sp-tag { display: inline-block; font-size: 10px; color: #2577e3; background: #eef5ff; border-radius: 3px; padding: 0 5px; margin-right: 6px; }
+        .sp-msg.typing { color: #999; font-size: 12px; }
+        .sp-quick { padding: 10px 12px 2px; display: flex; flex-wrap: wrap; gap: 6px; background: #fff; }
+        .sp-quick span {
+            font-size: 12px; color: #2577e3; background: #eef5ff; border-radius: 12px; padding: 4px 10px; cursor: pointer;
+        }
+        .sp-quick span:hover { background: #dcecff; }
+        .sp-input { display: flex; gap: 8px; padding: 10px 12px 12px; background: #fff; }
+        .sp-input input {
+            flex: 1; height: 36px; border: 1px solid #ddd; border-radius: 18px; padding: 0 14px; font-size: 13px; outline: none;
+        }
+        .sp-input input:focus { border-color: #2577e3; }
+        .sp-input button {
+            width: 36px; height: 36px; border-radius: 50%; border: none; background: #2577e3; color: #fff; cursor: pointer; font-size: 14px;
+        }
+        .sp-input button:disabled { background: #b9cdee; cursor: not-allowed; }
+        .sp-note { text-align: center; font-size: 11px; color: #bbb; padding: 0 0 8px; background: #fff; }
+
         @media (max-width: 1280px) {
             .side-nav { display: none; }
             .guide-col { display: none; }
@@ -3437,42 +3535,130 @@
                     <button class="modal-close" @click="showAuthModal = false">×</button>
                 </div>
                 <div class="auth-tabs">
-                    <div class="auth-tab" :class="{on: authTab === 'login'}" @click="authTab = 'login'">登录</div>
-                    <div class="auth-tab" :class="{on: authTab === 'register'}" @click="authTab = 'register'">注册</div>
-                    <div class="auth-tab" :class="{on: authTab === 'password'}" @click="authTab = 'password'">改密码</div>
+                    <!-- 页签一律走 openAuth：切页签要顺带停/起扫码轮询与重发倒计时，直接改 authTab 会漏 -->
+                    <div class="auth-tab" :class="{on: authTab === 'login'}" @click="openAuth('login')">登录</div>
+                    <div class="auth-tab" :class="{on: authTab === 'register'}" @click="openAuth('register')">注册</div>
+                    <div class="auth-tab" :class="{on: authTab === 'password'}" @click="openAuth('password')">改密码</div>
                 </div>
                 <div class="auth-body">
                     <template v-if="authTab === 'login'">
-                        <div class="auth-field">
-                            <label>用户名</label>
-                            <input type="text" v-model="loginForm.username" placeholder="请输入用户名" @keyup.enter="doLogin">
+                        <div class="lm-tabs">
+                            <div class="lm-tab" :class="{on: loginMethod === 'pwd'}" @click="switchLoginMethod('pwd')">账号密码</div>
+                            <div class="lm-tab" :class="{on: loginMethod === 'sms'}" @click="switchLoginMethod('sms')">手机验证码</div>
+                            <div class="lm-tab" :class="{on: loginMethod === 'qr'}" @click="switchLoginMethod('qr')">扫码登录</div>
                         </div>
-                        <div class="auth-field">
-                            <label>密码</label>
-                            <input type="password" v-model="loginForm.password" placeholder="请输入密码" @keyup.enter="doLogin">
-                        </div>
-                        <button class="auth-submit" @click="doLogin">登 录</button>
-                        <div class="auth-switch">还没有账号？<span @click="authTab = 'register'">立即注册</span></div>
+                        <template v-if="loginMethod === 'pwd'">
+                            <div class="auth-field">
+                                <label>用户名</label>
+                                <input type="text" v-model="loginForm.username" placeholder="请输入用户名" @keyup.enter="doLogin">
+                            </div>
+                            <div class="auth-field">
+                                <label>密码</label>
+                                <input type="password" v-model="loginForm.password" placeholder="请输入密码" @keyup.enter="doLogin">
+                            </div>
+                            <button class="auth-submit" @click="doLogin">登 录</button>
+                            <div class="auth-switch">还没有账号？<span @click="openAuth('register')">立即注册</span></div>
+                        </template>
+                        <template v-else-if="loginMethod === 'sms'">
+                            <div class="auth-field">
+                                <label>手机号（需已注册）</label>
+                                <input type="text" v-model="smsLoginForm.phone" maxlength="11" placeholder="请输入注册手机号">
+                            </div>
+                            <div class="auth-demo-code" v-if="smsDemoCode">
+                                <i class="fas fa-bullhorn"></i><span>演示站验证码（接入短信网关后不再显示）：</span><b>{{ smsDemoCode }}</b>
+                            </div>
+                            <div class="auth-field">
+                                <label>短信验证码</label>
+                                <div class="auth-code-row">
+                                    <input type="text" v-model="smsLoginForm.code" maxlength="6" placeholder="6 位验证码" @keyup.enter="doSmsLogin">
+                                    <button class="auth-send-btn" :disabled="smsCountdown > 0" @click="sendSmsLoginCode">{{ smsCountdown > 0 ? smsCountdown + 's 后重发' : '获取验证码' }}</button>
+                                </div>
+                            </div>
+                            <button class="auth-submit" @click="doSmsLogin">登 录</button>
+                            <div class="auth-switch">还没有账号？<span @click="openAuth('register')">立即注册</span></div>
+                        </template>
+                        <template v-else>
+                            <div class="qr-wrap">
+                                <div class="lm-qr-box" ref="qrBox"></div>
+                                <div class="qr-mask" v-if="!qrLibOk">
+                                    <span>二维码组件加载失败，请用手机直接打开确认页：</span>
+                                    <a v-if="qrUrl" :href="qrUrl" target="_blank" rel="noopener">{{ qrUrl }}</a>
+                                    <span v-else style="color:#999">确认页地址还没取到，请稍等或点下方刷新</span>
+                                    <span style="font-size:11px;color:#999">页面会继续轮询，手机确认后电脑同样会登录</span>
+                                </div>
+                                <div class="qr-mask" v-else-if="qrMask">
+                                    <template v-if="qrStatus === 'EXPIRED' || qrStatus === 'NOT_FOUND'">
+                                        <span>{{ qrTip }}</span>
+                                        <button class="qr-refresh" @click="startQrLogin">刷新二维码</button>
+                                    </template>
+                                    <template v-else-if="qrStatus === 'REJECTED'">
+                                        <span>已在手机上取消本次登录</span>
+                                        <button class="qr-refresh" @click="startQrLogin">重新发起</button>
+                                    </template>
+                                    <template v-else>
+                                        <span>{{ qrTip }}</span>
+                                    </template>
+                                </div>
+                            </div>
+                            <div class="qr-status" :class="{ok: qrStatus === 'SCANNED'}">{{ qrTip }}</div>
+                            <div class="qr-fallback">
+                                请使用已登录悦途的手机扫码，在手机上确认后电脑自动登录<br>
+                                <!-- 场景还没创建出来时不给空 href：点了等于刷新整页，登录态和填了一半的表单都没了 -->
+                                <a v-if="qrUrl" :href="qrUrl" target="_blank" rel="noopener">点此打开手机确认页</a>
+                                <span v-else>确认页地址加载中…</span>
+                            </div>
+                        </template>
                     </template>
                     <template v-else-if="authTab === 'register'">
-                        <div class="auth-field">
-                            <label>用户名（3-20 位中英文/数字/下划线）</label>
-                            <input type="text" v-model="registerForm.username" placeholder="设置用户名">
+                        <div class="lm-tabs">
+                            <div class="lm-tab" :class="{on: registerMethod === 'pwd'}" @click="switchRegisterMethod('pwd')">账号注册</div>
+                            <div class="lm-tab" :class="{on: registerMethod === 'phone'}" @click="switchRegisterMethod('phone')">手机号注册</div>
                         </div>
-                        <div class="auth-field">
-                            <label>密码（至少 8 位，需含字母和数字）</label>
-                            <input type="password" v-model="registerForm.password" placeholder="设置密码">
-                        </div>
-                        <div class="auth-field">
-                            <label>昵称</label>
-                            <input type="text" v-model="registerForm.nickname" placeholder="怎么称呼您（选填）">
-                        </div>
-                        <div class="auth-field">
-                            <label>手机号</label>
-                            <input type="text" v-model="registerForm.phone" maxlength="11" placeholder="用于接收订单短信（选填）">
-                        </div>
-                        <button class="auth-submit" @click="doRegister">注 册</button>
-                        <div class="auth-switch">已有账号？<span @click="authTab = 'login'">去登录</span></div>
+                        <template v-if="registerMethod === 'pwd'">
+                            <div class="auth-field">
+                                <label>用户名（3-20 位中英文/数字/下划线）</label>
+                                <input type="text" v-model="registerForm.username" placeholder="设置用户名">
+                            </div>
+                            <div class="auth-field">
+                                <label>密码（至少 8 位，需含字母和数字）</label>
+                                <input type="password" v-model="registerForm.password" placeholder="设置密码">
+                            </div>
+                            <div class="auth-field">
+                                <label>昵称</label>
+                                <input type="text" v-model="registerForm.nickname" placeholder="怎么称呼您（选填）">
+                            </div>
+                            <div class="auth-field">
+                                <label>手机号</label>
+                                <input type="text" v-model="registerForm.phone" maxlength="11" placeholder="用于接收订单短信（选填）">
+                            </div>
+                            <button class="auth-submit" @click="doRegister">注 册</button>
+                        </template>
+                        <template v-else>
+                            <div class="auth-field">
+                                <label>手机号（需未注册）</label>
+                                <input type="text" v-model="phoneRegForm.phone" maxlength="11" placeholder="将作为登录账号">
+                            </div>
+                            <div class="auth-demo-code" v-if="regDemoCode">
+                                <i class="fas fa-bullhorn"></i><span>演示站验证码（接入短信网关后不再显示）：</span><b>{{ regDemoCode }}</b>
+                            </div>
+                            <div class="auth-field">
+                                <label>短信验证码</label>
+                                <div class="auth-code-row">
+                                    <input type="text" v-model="phoneRegForm.code" maxlength="6" placeholder="6 位验证码" @keyup.enter="doRegisterByPhone">
+                                    <button class="auth-send-btn" :disabled="regCountdown > 0" @click="sendRegCode">{{ regCountdown > 0 ? regCountdown + 's 后重发' : '获取验证码' }}</button>
+                                </div>
+                            </div>
+                            <div class="auth-field">
+                                <label>昵称</label>
+                                <input type="text" v-model="phoneRegForm.nickname" placeholder="怎么称呼您（选填）">
+                            </div>
+                            <div class="auth-field">
+                                <label>设置密码（选填，留空则之后用验证码登录）</label>
+                                <input type="password" v-model="phoneRegForm.password" placeholder="至少 8 位，需含字母和数字">
+                            </div>
+                            <button class="auth-submit" @click="doRegisterByPhone">注册并登录</button>
+                        </template>
+                        <div class="auth-switch">已有账号？<span @click="openAuth('login')">去登录</span></div>
                     </template>
                     <template v-else>
                         <div class="auth-field">
@@ -3492,6 +3678,40 @@
                     </template>
                 </div>
             </div>
+        </div>
+        </transition>
+
+        <!-- 7×24 客服：AI 规则问答（演示） -->
+        <div class="support-fab" @click="openSupport" title="7×24 小时在线客服">
+            <span class="sf-dot"></span>
+            <i class="fas fa-headset"></i>
+            <span>客服</span>
+        </div>
+        <transition name="fade">
+        <div class="support-panel" v-if="supportOpen">
+            <div class="sp-head">
+                <div class="sp-avatar"><i class="fas fa-robot"></i></div>
+                <div>
+                    <b>悦途小助手</b>
+                    <small>7×24 在线 · 智能客服</small>
+                </div>
+                <button class="sp-close" @click="supportOpen = false">×</button>
+            </div>
+            <div class="sp-msgs" ref="supportMsgs">
+                <!-- 用户消息也要走 .sp-msg.user（右侧蓝泡）：写死 bot 会让两边看起来都是客服在说话 -->
+                <div class="sp-msg" :class="m.me ? 'user' : 'bot'" v-for="(m, i) in supportMsgs" :key="i">
+                    <span class="sp-tag" v-if="m.source">{{ m.source === 'rule-demo' ? '演示·规则问答' : '本地演示' }}</span><span>{{ m.text }}</span>
+                </div>
+                <div class="sp-msg bot typing" v-if="supportTyping">正在输入…</div>
+            </div>
+            <div class="sp-quick">
+                <span v-for="q in supportQuick" :key="q" @click="quickAsk(q)">{{ q }}</span>
+            </div>
+            <div class="sp-input">
+                <input v-model="supportInput" maxlength="200" placeholder="输入您的问题…" @keyup.enter="sendSupport">
+                <button :disabled="supportTyping || !supportInput.trim()" @click="sendSupport"><i class="fas fa-paper-plane"></i></button>
+            </div>
+            <div class="sp-note">AI 规则问答为演示功能 · 热线 400-168-6688</div>
         </div>
         </transition>
 
@@ -4767,6 +4987,29 @@
                 authTab: 'login',
                 loginForm: { username: '', password: '' },
                 registerForm: { username: '', password: '', nickname: '', phone: '' },
+                // 登录三种方式 / 注册两种方式的子页签
+                loginMethod: 'pwd',      // pwd / sms / qr
+                registerMethod: 'pwd',   // pwd / phone
+                smsLoginForm: { phone: '', code: '' },
+                smsCountdown: 0,         // 登录码 60 秒重发倒计时（由 smsResendAt 算出来，别直接改）
+                smsTimer: null,
+                smsResendAt: 0,          // 后端允许下次发码的时刻；关弹窗只清计时器，不动这个窗口
+                smsDemoCode: '',         // 演示回显的明文验证码；接真网关后后端不再返回，这里保持空
+                phoneRegForm: { phone: '', code: '', nickname: '', password: '' },
+                regCountdown: 0,         // 注册码 60 秒重发倒计时
+                regTimer: null,
+                regResendAt: 0,
+                regDemoCode: '',
+                // 扫码登录：qrMask 为真时二维码上盖遮罩（过期/被取消/加载中），PENDING/SCANNED 时露出二维码
+                // qrSeq 是代际号：每次发起/停止都自增，异步回调先比对再落地，避免旧场景的响应把新轮询带偏
+                qrScene: '', qrUrl: '', qrStatus: '', qrTip: '正在生成二维码…', qrMask: true, qrLibOk: true, qrTimer: null,
+                qrSeq: 0, qrBusy: false,
+                // 7×24 客服（AI 规则问答演示）
+                supportOpen: false,
+                supportInput: '',
+                supportMsgs: [],
+                supportTyping: false,
+                supportQuick: ['怎么退款', '订单在哪里看', '怎么用验证码登录', '支付超时会怎样'],
                 // 改密码面板：改密成功后后端会把该账号所有会话令牌吊销，所以必须重新登录
                 pwdForm: { oldPassword: '', newPassword: '', confirm: '' },
                 // 口令规则文案，与后端 UserService.PWD_RULE 同步维护
@@ -7109,6 +7352,340 @@
                 openAuth(tab) {
                     this.authTab = tab;
                     this.showAuthModal = true;
+                    this.syncAuthPanel();
+                },
+
+                // 登录/注册面板的「起停」只认这一个入口。页签能从头栏、正文链接、登录失败兜底等
+                // 好几处改变，逐个入口手写清理迟早漏一个——统一在这里按当前状态校准：
+                // 扫码轮询只在「弹窗开着 + 登录页 + 扫码方式」时跑，验证码倒计时按剩余窗口续上。
+                syncAuthPanel() {
+                    const onQr = this.showAuthModal && this.authTab === 'login' && this.loginMethod === 'qr';
+                    if (!onQr) this.stopQrLogin();
+                    else if (!this.qrScene && !this.qrBusy) this.startQrLogin();
+
+                    const onSms = this.showAuthModal && this.authTab === 'login' && this.loginMethod === 'sms';
+                    const onReg = this.showAuthModal && this.authTab === 'register' && this.registerMethod === 'phone';
+                    if (onSms) this.resumeCountdown('sms'); else this.stopSmsCountdown('sms');
+                    if (onReg) this.resumeCountdown('reg'); else this.stopSmsCountdown('reg');
+                },
+
+                // ==================== 登录三种方式 ====================
+                switchLoginMethod(m) {
+                    this.loginMethod = m;
+                },
+
+                switchRegisterMethod(m) {
+                    this.registerMethod = m;
+                },
+
+                // 重发倒计时以后端返回的 resendSeconds 为准，且记的是「允许下次发码的时刻」。
+                // 关弹窗会把 setInterval 清掉，但后端的重发窗口还在——如果倒计时跟着清零，
+                // 重新打开就能连点发码，直到撞上后端限流才报错，体验是「按钮能点、码发不出」。
+                startCountdown(which, seconds) {
+                    const secs = Math.max(1, Math.round(seconds || 60));
+                    this[which === 'sms' ? 'smsResendAt' : 'regResendAt'] = Date.now() + secs * 1000;
+                    this.resumeCountdown(which);
+                },
+                resumeCountdown(which) {
+                    this.clearCountdownTimer(which);
+                    const at = which === 'sms' ? this.smsResendAt : this.regResendAt;
+                    const left = Math.ceil((at - Date.now()) / 1000);
+                    if (left <= 0) { this[which === 'sms' ? 'smsCountdown' : 'regCountdown'] = 0; return; }
+                    this[which === 'sms' ? 'smsCountdown' : 'regCountdown'] = left;
+                    this[which === 'sms' ? 'smsTimer' : 'regTimer'] = setInterval(() => {
+                        if (this[which === 'sms' ? 'smsResendAt' : 'regResendAt'] <= Date.now()) {
+                            this.stopSmsCountdown(which);
+                            return;
+                        }
+                        this[which === 'sms' ? 'smsCountdown' : 'regCountdown'] =
+                            Math.max(0, Math.ceil(((which === 'sms' ? this.smsResendAt : this.regResendAt) - Date.now()) / 1000));
+                    }, 1000);
+                },
+                clearCountdownTimer(which) {
+                    const timer = which === 'sms' ? 'smsTimer' : 'regTimer';
+                    if (this[timer]) { clearInterval(this[timer]); this[timer] = null; }
+                },
+                stopSmsCountdown(which) {
+                    this.clearCountdownTimer(which);
+                    this[which === 'sms' ? 'smsCountdown' : 'regCountdown'] = 0;
+                },
+
+                sendSmsLoginCode() {
+                    const phone = this.smsLoginForm.phone.trim();
+                    if (!/^1[3-9]\d{9}$/.test(phone)) { this.showNotification('请输入11位有效手机号码', true); return; }
+                    this.smsDemoCode = '';
+                    this.request('/auth/sms/send', {
+                        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ phone })
+                    }).then(d => {
+                        this.smsDemoCode = d.demoCode || '';
+                        this.startCountdown('sms', d.resendSeconds || 60);
+                        this.markMode(true);
+                        this.showNotification(d.demoCode ? '验证码已发送（演示回显：' + d.demoCode + '）' : '验证码已发送，请注意查收');
+                    }).catch(err => {
+                        if (this.isNetError(err)) { this.markMode(false); this.showNotification('手机验证码登录需启动后端服务', true); }
+                        // 后端在重发窗口里会回「请 60 秒后再获取」，此时本地倒计时可能还没续上
+                        // （比如刚刷新过页面），按提示把按钮锁回窗口内，省得反复撞限流
+                        else {
+                            this.showNotification(err.message, true);
+                            const m = /请\s*(\d+)\s*秒后/.exec(err.message || '');
+                            if (m) this.startCountdown('sms', Number(m[1]));
+                        }
+                    });
+                },
+
+                doSmsLogin() {
+                    const phone = this.smsLoginForm.phone.trim();
+                    const code = this.smsLoginForm.code.trim();
+                    if (!/^1[3-9]\d{9}$/.test(phone)) { this.showNotification('请输入11位有效手机号码', true); return; }
+                    if (!/^\d{6}$/.test(code)) { this.showNotification('请输入6位短信验证码', true); return; }
+                    this.request('/auth/sms/login', {
+                        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ phone, code })
+                    }).then(d => {
+                        this.markMode(true);
+                        this.authResult(d);
+                        this.showNotification(`登录成功，欢迎回来，${d.nickname}`);
+                        this.smsLoginForm = { phone: '', code: '' };
+                        this.smsDemoCode = '';
+                        // 登录成功了，这一码的重发窗口就没意义了：清掉时刻，否则下次进来
+                        // 顶着一个用不上的 60 秒倒计时（后端仍会按自己的窗口限流）
+                        this.smsResendAt = 0;
+                        this.stopSmsCountdown('sms');
+                    }).catch(err => {
+                        if (this.isNetError(err)) { this.markMode(false); this.showNotification('手机验证码登录需启动后端服务', true); }
+                        else this.showNotification(err.message, true);
+                    });
+                },
+
+                // 扫码登录：创建场景 → 画二维码 → 1.5 秒轮询一次领取令牌。
+                // 电脑端不持有手机的任何登录态：令牌是手机确认后、由轮询请求当场签发的新会话
+                //
+                // 这里的异步全部带代际号（qrSeq）：关弹窗、切页签、连点「刷新二维码」都会让
+                // 上一轮的「创建场景」或「轮询」响应晚一步回来，如果直接落地就会出现
+                // 「弹窗早关了二维码又活了」「连点后有两个 interval 同时轮询」
+                // 「旧场景的 EXPIRED 把新场景的轮询停掉」。所以每个回调先比对代际，不匹配就丢弃。
+                startQrLogin() {
+                    this.stopQrLogin();                       // 内部会自增 qrSeq，作废在途回调
+                    const seq = this.qrSeq;                   // stopQrLogin 之后取到的就是本轮的代际
+                    this.qrBusy = true;                       // 场景还没回来时也占住位，防 syncAuthPanel 重复发起
+                    this.qrStatus = '';
+                    this.qrTip = '正在生成二维码…';
+                    this.qrMask = true;
+                    this.qrLibOk = true;
+                    this.qrUrl = '';
+                    this.request('/auth/qrcode', {
+                        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}'
+                    }).then(d => {
+                        if (seq !== this.qrSeq) return;       // 等回来时这一轮已经被顶掉了
+                        this.qrBusy = false;
+                        this.qrScene = d.scene;
+                        this.qrUrl = d.confirmUrl;
+                        this.qrTip = '正在生成二维码…';
+                        this.markMode(true);
+                        this.drawQr(d.confirmUrl).then(ok => {
+                            // 画二维码是异步的（CDN 加载），这期间弹窗可能已经关了
+                            if (seq !== this.qrSeq) return;
+                            if (!ok) { this.qrLibOk = false; this.qrMask = false; }
+                        });
+                        this.pollQrOnce(seq);
+                        this.qrTimer = setInterval(() => this.pollQrOnce(seq), 1500);
+                    }).catch(err => {
+                        if (seq !== this.qrSeq) return;
+                        this.qrBusy = false;
+                        this.qrMask = true;
+                        if (this.isNetError(err)) { this.markMode(false); this.qrTip = '无法连接后端服务，扫码登录不可用'; }
+                        else this.qrTip = err.message;
+                    });
+                },
+
+                stopQrLogin() {
+                    this.qrSeq++;                             // 代际一变，所有在途回调立即失效
+                    if (this.qrTimer) { clearInterval(this.qrTimer); this.qrTimer = null; }
+                    this.qrScene = '';
+                    this.qrBusy = false;
+                },
+
+                pollQrOnce(seq) {
+                    const gen = seq === undefined ? this.qrSeq : seq;
+                    if (gen !== this.qrSeq || !this.qrScene) return;
+                    const scene = this.qrScene;               // 请求发出时的场景，回调只认它
+                    this.request('/auth/qrcode/' + scene).then(d => {
+                        if (gen !== this.qrSeq || this.qrScene !== scene) return;
+                        this.qrStatus = d.status || '';
+                        if (d.status === 'CONFIRMED' && d.login) {
+                            this.markMode(true);
+                            this.authResult(d.login);
+                            this.stopQrLogin();
+                            this.showNotification(`扫码登录成功，欢迎回来，${d.login.nickname}`);
+                            return;
+                        }
+                        if (d.status === 'SCANNED') {
+                            this.qrMask = false;
+                            this.qrTip = (d.nickname || '对方') + ' 已扫码，请在手机上点击「确认登录」';
+                        } else if (d.status === 'PENDING') {
+                            this.qrMask = false;
+                            this.qrTip = '请用已登录悦途的手机扫码（' + Math.max(0, d.remainSeconds || 0) + ' 秒内有效）';
+                        } else if (d.status === 'EXPIRED') {
+                            this.qrMask = true;
+                            this.qrTip = '二维码已过期，点击刷新重新生成';
+                            this.stopQrLogin();
+                        } else if (d.status === 'NOT_FOUND') {
+                            this.qrMask = true;
+                            this.qrTip = '二维码已失效或结果已被领取，请重新发起';
+                            this.stopQrLogin();
+                        } else if (d.status === 'REJECTED') {
+                            this.qrMask = true;
+                            this.qrTip = '已在手机上取消本次登录';
+                            this.stopQrLogin();
+                        }
+                    }).catch(err => {
+                        // 上一轮的请求失败得更晚，不能让它把这一轮的轮询停掉
+                        if (gen !== this.qrSeq || this.qrScene !== scene) return;
+                        if (this.isNetError(err)) {
+                            this.stopQrLogin();
+                            this.qrMask = true;
+                            this.qrTip = '无法连接后端服务，扫码登录不可用';
+                        }
+                    });
+                },
+
+                // qrcode-generator 走 CDN；失败则降级为「点链接打开确认页」，轮询照常（手机确认后仍能登录）
+                loadQrLib() {
+                    if (window.qrcode) return Promise.resolve(true);
+                    if (this._qrLibPromise) return this._qrLibPromise;
+                    this._qrLibPromise = new Promise(resolve => {
+                        const s = document.createElement('script');
+                        s.src = 'https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.js';
+                        s.onload = () => resolve(!!window.qrcode);
+                        s.onerror = () => resolve(false);
+                        document.head.appendChild(s);
+                        setTimeout(() => resolve(!!window.qrcode), 8000); // 极端网络下的兜底
+                    });
+                    // 失败不缓存：一次网络抖动（离线演示、CDN 恰好不通）会把「二维码组件加载失败」
+                    // 钉死到刷新页面为止。成功才保留 Promise，之后复用同一个已加载的脚本。
+                    this._qrLibPromise.then(ok => { if (!ok) this._qrLibPromise = null; });
+                    return this._qrLibPromise;
+                },
+
+                // 把确认页地址画进 ref=qrBox（纯 SVG 容器，不含 Vue 管理的子节点，可安全替换 innerHTML）
+                drawQr(url) {
+                    const box = this.$refs.qrBox;
+                    if (!box) return Promise.resolve(false);
+                    return this.loadQrLib().then(ok => {
+                        if (!ok) { box.innerHTML = ''; return false; }
+                        try {
+                            const qr = window.qrcode(0, 'M'); // typeNumber 0 = 按内容自动选型
+                            qr.addData(url);
+                            qr.make();
+                            box.innerHTML = qr.createSvgTag({ cellSize: 3, margin: 2 });
+                            return true;
+                        } catch (e) { box.innerHTML = ''; return false; }
+                    });
+                },
+
+                // 手机号注册（验证码注册）的配套动作
+                sendRegCode() {
+                    const phone = this.phoneRegForm.phone.trim();
+                    if (!/^1[3-9]\d{9}$/.test(phone)) { this.showNotification('请输入11位有效手机号码', true); return; }
+                    this.regDemoCode = '';
+                    this.request('/auth/sms/register-code', {
+                        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ phone })
+                    }).then(d => {
+                        this.regDemoCode = d.demoCode || '';
+                        this.startCountdown('reg', d.resendSeconds || 60);
+                        this.markMode(true);
+                        this.showNotification(d.demoCode ? '验证码已发送（演示回显：' + d.demoCode + '）' : '验证码已发送，请注意查收');
+                    }).catch(err => {
+                        if (this.isNetError(err)) { this.markMode(false); this.showNotification('手机号注册需启动后端服务', true); }
+                        else {
+                            this.showNotification(err.message, true);
+                            const m = /请\s*(\d+)\s*秒后/.exec(err.message || '');
+                            if (m) this.startCountdown('reg', Number(m[1]));
+                        }
+                    });
+                },
+
+                doRegisterByPhone() {
+                    const f = this.phoneRegForm;
+                    const phone = f.phone.trim();
+                    const code = f.code.trim();
+                    if (!/^1[3-9]\d{9}$/.test(phone)) { this.showNotification('请输入11位有效手机号码', true); return; }
+                    if (!/^\d{6}$/.test(code)) { this.showNotification('请输入6位短信验证码', true); return; }
+                    if (f.password && !this.isStrongPassword(f.password)) { this.showNotification(this.pwdRuleTip, true); return; }
+                    this.request('/auth/register', {
+                        method: 'POST', headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ phone, code, nickname: f.nickname.trim(), password: f.password || '' })
+                    }).then(d => {
+                        this.markMode(true);
+                        this.authResult(d);
+                        this.showNotification(`注册成功，已自动登录，你好 ${d.nickname}`);
+                        this.phoneRegForm = { phone: '', code: '', nickname: '', password: '' };
+                        this.regDemoCode = '';
+                        this.regResendAt = 0;
+                        this.stopSmsCountdown('reg');
+                    }).catch(err => {
+                        if (this.isNetError(err)) { this.markMode(false); this.showNotification('手机号注册需启动后端服务', true); }
+                        else this.showNotification(err.message, true);
+                    });
+                },
+
+                // 关闭登录弹窗：轮询与倒计时一并停掉，避免弹窗关了定时器还在后台跑
+                closeAuth() {
+                    this.showAuthModal = false;
+                },
+
+                // ==================== 7×24 客服（AI 规则问答演示） ====================
+                openSupport() {
+                    this.supportOpen = !this.supportOpen;
+                    if (this.supportOpen && !this.supportMsgs.length) {
+                        this.supportMsgs.push({
+                            text: '您好，我是悦途旅行智能客服小悦，7×24 小时在线。您可以问我订单、退款、支付、登录等问题。',
+                            source: 'rule-demo'
+                        });
+                    }
+                    if (this.supportOpen) this.$nextTick(() => this.scrollSupport());
+                },
+
+                quickAsk(q) {
+                    this.supportInput = q;
+                    this.sendSupport();
+                },
+
+                sendSupport() {
+                    const text = this.supportInput.trim();
+                    if (!text || this.supportTyping) return;
+                    this.supportInput = '';
+                    this.supportMsgs.push({ text, me: true });
+                    this.scrollSupport();
+                    this.supportTyping = true;
+                    this.request('/support/chat', {
+                        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ message: text })
+                    }).then(d => {
+                        this.supportMsgs.push({ text: d.reply, source: d.source });
+                        this.markMode(true);
+                    }).catch(err => {
+                        if (this.isNetError(err)) {
+                            this.markMode(false);
+                            this.supportMsgs.push({ text: this.localSupportReply(text), source: 'local' });
+                        } else {
+                            this.supportMsgs.push({ text: err.message, source: 'local' });
+                        }
+                    }).finally(() => {
+                        this.supportTyping = false;
+                        this.$nextTick(() => this.scrollSupport());
+                    });
+                },
+
+                scrollSupport() {
+                    const el = this.$refs.supportMsgs;
+                    if (el) el.scrollTop = el.scrollHeight;
+                },
+
+                // 后端没起来时的兜底回答（标注本地演示，与规则问答的演示定位一致）
+                localSupportReply(text) {
+                    if (/退款/.test(text)) return '本地演示（后端未启动）：已支付订单在「订单中心 → 订单详情」点「申请退款」，款项全额原路退回。';
+                    if (/取消|订单/.test(text)) return '本地演示（后端未启动）：订单在「订单中心」查看，待支付可取消、已支付可退款，点击订单号进入详情。';
+                    if (/登录|验证码|扫码|注册/.test(text)) return '本地演示（后端未启动）：验证码与扫码登录需启动后端服务；本地模式仅支持账号密码登录。';
+                    return '本地演示（后端未启动）：当前仅有简易回答。启动 Java 后端后可获得完整智能回复，或拨打 400-168-6688。';
                 },
 
                 // 是否已登录：本地演示模式的 local- 令牌同样算登录（订单只落 localStorage）
@@ -8742,6 +9319,7 @@
                 // ESC 逐层关闭弹窗：只关最上层，避免把下层的订单上下文一起关掉
                 handleKeydown(e) {
                     if (e.key !== 'Escape') return;
+                    if (this.supportOpen) { this.supportOpen = false; return; }
                     if (this.payVerifyShow) { this.closePayVerify(); return; }
                     if (this.showSuccessModal) { this.closeSuccess(); return; }
                     if (this.showPayModal) { this.closePay(); return; }
@@ -8959,6 +9537,23 @@
                     if (this.bannerTimer) { clearInterval(this.bannerTimer); this.bannerTimer = null; }
                 }
             },
+            watch: {
+                // 登录弹窗关闭（点遮罩/×/ESC/登录成功）时停掉扫码轮询与验证码倒计时，
+                // 不依赖每个关闭入口都记得手动清理。重发窗口（smsResendAt/regResendAt）保留，
+                // 那是后端定的 60 秒，重新打开弹窗时按剩余时间把倒计时续上。
+                showAuthModal(v) {
+                    if (!v) {
+                        this.stopQrLogin();
+                        this.stopSmsCountdown('sms');
+                        this.stopSmsCountdown('reg');
+                    }
+                },
+                // 页签与登录/注册方式还可能从别处改变（登录失败兜底、令牌过期后回登录页），
+                // 兜底再校准一次：离开扫码就停轮询，回到对应页签就把该续的倒计时续上。
+                authTab() { this.syncAuthPanel(); },
+                loginMethod() { this.syncAuthPanel(); },
+                registerMethod() { this.syncAuthPanel(); }
+            },
             mounted() {
                 // 设置默认日期（必须按本地时区取日期，toISOString 是 UTC，凌晨会错一天）
                 const fmt = d => this.fmtDate(d);
@@ -8991,8 +9586,18 @@
                 // 归零时后端定时任务才是最终裁决者，这里只是先把页面状态同步过来，避免用户看到「待支付 00:00」
                 this.payTickTimer = setInterval(() => this.tickOrders(), 1000);
                 // 切回标签页时立刻补一跳：隐藏页面的定时器会被浏览器降频到每分钟一次，
-                // 不补这一下，用户回到收银台看到的剩余时间会停在离开时的数字上
-                this.payVisibilityTick = () => { if (!document.hidden) this.tickOrders(); };
+                // 不补这一下，用户回到收银台看到的剩余时间会停在离开时的数字上；
+                // 扫码轮询同理——手机确认了但电脑标签页在后台时，回来立刻领取结果
+                this.payVisibilityTick = () => {
+                    if (!document.hidden) {
+                        this.tickOrders();
+                        if (this.qrScene) this.pollQrOnce();
+                        // 验证码倒计时同样被降频：回来立刻按 resendAt 校准显示的秒数，
+                        // 否则按钮会停在离开时的数字上，直到下一次分钟级 tick 才跳对
+                        if (this.smsResendAt) this.resumeCountdown('sms');
+                        if (this.regResendAt) this.resumeCountdown('reg');
+                    }
+                };
                 document.addEventListener('visibilitychange', this.payVisibilityTick);
 
                 // 动效与动态数据（顶栏收缩 / 预订播报 / 倒计时 / 地图热推 / 滚动渐显）
@@ -9011,6 +9616,9 @@
                 window.removeEventListener('keydown', this.handleKeydown);
                 if (this.payTickTimer) clearInterval(this.payTickTimer);
                 if (this.payVisibilityTick) document.removeEventListener('visibilitychange', this.payVisibilityTick);
+                this.stopQrLogin();
+                this.stopSmsCountdown('sms');
+                this.stopSmsCountdown('reg');
                 this.destroyEffects();
             }
         });
