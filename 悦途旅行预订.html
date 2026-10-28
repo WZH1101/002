@@ -2537,7 +2537,7 @@
 
                 <!-- ========== AI 行程助手 ========== -->
                 <div class="mod-section" v-if="moduleView === 'aitrip'">
-                    <div class="mod-title"><h2><i class="fas fa-wand-magic-sparkles"></i> AI行程助手 <em style="font-style:normal;font-size:11px;color:#fff;background:#ff6a00;border-radius:8px 8px 8px 0;padding:1px 8px;vertical-align:middle;">NEW</em></h2><span class="sub">基于真实车次/航班/门票/酒店数据自动规划</span></div>
+                    <div class="mod-title"><h2><i class="fas fa-wand-magic-sparkles"></i> AI行程助手 <em style="font-style:normal;font-size:11px;color:#fff;background:#ff6a00;border-radius:8px 8px 8px 0;padding:1px 8px;vertical-align:middle;">NEW</em></h2><span class="sub">按规则拼装真实车次/航班/门票/酒店数据生成行程，未接入大模型</span></div>
                     <div class="trip-hero">
                         <div class="th-robot"><i class="fas fa-robot"></i></div>
                         <div class="th-text">
@@ -3556,12 +3556,15 @@
                         </div>
                         <div class="form-row">
                             <div class="form-group" style="flex: 1 1 100%; max-width: 100%;">
-                                <label>支付方式</label>
+                                <label>支付方式 <em style="font-style: normal; color: #ff4d4f;">（必选，不预设默认）</em></label>
                                 <div class="pay-picks">
                                     <div class="pay-pick" v-for="c in payChannels" :key="c.key" :class="{ on: c.key === payChannel }" @click="applyPayChannel(c.key)">
                                         <i :class="c.icon" :style="{ color: c.color }"></i>{{ c.name }}
                                     </div>
                                 </div>
+                                <p v-if="!payChannel" style="margin: 8px 0 0; font-size: 12px; color: #ff9800;">
+                                    <i class="fas fa-circle-exclamation"></i> 请选择一种支付方式后，「确认预订」才会生效。
+                                </p>
                             </div>
                         </div>
                     </div>
@@ -3615,8 +3618,8 @@
                         <div class="order-detail-row">
                             <span class="order-detail-label">支付方式:</span>
                             <span class="order-detail-value">
-                                {{ payChannelItem.name }}
-                                <em style="font-style: normal; color: #2577e3; cursor: pointer; font-size: 12px; margin-left: 6px;" @click="openPay(payChannel)">更换</em>
+                                {{ payChannelName }}
+                                <em style="font-style: normal; color: #2577e3; cursor: pointer; font-size: 12px; margin-left: 6px;" @click="openPay(payChannel)">{{ payChannel ? '更换' : '去选择' }}</em>
                             </span>
                         </div>
                         <div class="order-detail-row">
@@ -3658,6 +3661,11 @@
                                    @keyup.enter="completePayVerify">
                             <div class="pv-err" v-if="payVerifyErr">{{ payVerifyErr }}</div>
                         </div>
+                        <!-- 演示通道说明：扫码不真实扣款、短信码为固定值，上线前须换成真实网关 -->
+                        <p class="pay-note" style="margin-top: 14px;">
+                            <i class="fas fa-flask"></i>
+                            <span>演示校验 · {{ payChannelItem.tip }}</span>
+                        </p>
                     </div>
                 </div>
                 <div class="modal-footer">
@@ -4055,23 +4063,26 @@
                         <div class="pay-opt" v-for="c in payChannels" :key="c.key" :class="{ on: c.key === payKey }" @click="pickPay(c.key)">
                             <span class="pay-opt-ico" :style="{ color: c.color }"><i :class="c.icon"></i></span>
                             <div class="pay-opt-main">
-                                <div class="pay-opt-name">{{ c.name }}<em v-if="c.key === payChannel">默认</em></div>
+                                <div class="pay-opt-name">{{ c.name }}<em v-if="c.key === payChannel">本次已选</em></div>
                                 <div class="pay-opt-desc">{{ c.scene }}</div>
                             </div>
                         </div>
                     </div>
-                    <div class="pay-detail">
+                    <div class="pay-detail" v-if="payDetailRows.length">
                         <div class="order-info-row" v-for="row in payDetailRows" :key="row.k">
                             <span>{{ row.k }}</span>
                             <span style="color: #333;">{{ row.v }}</span>
                         </div>
                     </div>
-                    <p class="pay-note"><i class="fas fa-shield-halved"></i><span>{{ payKeyItem.tip }}</span></p>
+                    <p v-else style="margin: 16px 0 0; font-size: 13px; color: #999; text-align: center;">
+                        点击上方任一支付方式查看详情；本平台不预设默认支付方式，由你自主选择。
+                    </p>
+                    <p class="pay-note" v-if="payKeyItem"><i class="fas fa-shield-halved"></i><span>{{ payKeyItem.tip }}</span></p>
                 </div>
                 <div class="modal-footer">
                     <button class="btn-default" @click="closePay">关闭</button>
-                    <button class="btn-primary" :disabled="payKey === payChannel" @click="setDefaultPay">
-                        {{ payKey === payChannel ? '当前默认支付方式' : '设为默认支付方式' }}
+                    <button class="btn-primary" :disabled="!payKey || payKey === payChannel" @click="choosePay">
+                        {{ !payKey ? '请选择支付方式' : (payKey === payChannel ? '当前已选' : '选择此方式') }}
                     </button>
                 </div>
             </div>
@@ -5190,15 +5201,12 @@
                 subscribeEmail: '',
                 feedbackText: '',
 
-                // 支付渠道（默认渠道持久化到 localStorage，刷新后仍生效）
+                // 支付渠道：不设默认值，每次下单由用户自主选择。
+                // 曾把上次的选择持久化到 localStorage，等价于给用户安排了一个默认渠道，
+                // 与「自主选择」的口径不一致，故此处既不写入也不读取。
                 showPayModal: false,
-                payKey: 'wechat',
-                payChannel: (() => {
-                    try {
-                        const saved = localStorage.getItem('ctripPayChannel');
-                        return ['wechat', 'alipay', 'visa', 'mastercard', 'unionpay'].indexOf(saved) > -1 ? saved : 'wechat';
-                    } catch (e) { return 'wechat'; }
-                })(),
+                payKey: '',
+                payChannel: '',
                 payVerified: false,
                 payVerifyShow: false,
                 payVerifyInput: '',
@@ -5386,22 +5394,27 @@
                         }
                     ];
                 },
-                // 当前正在使用的支付渠道
+                // 当前已选的支付渠道；未选择时返回 null（不再悄悄回落到第一个渠道）
                 payChannelItem() {
-                    return this.payChannels.find(c => c.key === this.payChannel) || this.payChannels[0];
+                    return this.payChannels.find(c => c.key === this.payChannel) || null;
                 },
-                // 面板中正在查看的渠道
+                // 渠道名：未选择时给明确文案，避免模板里出现 undefined
+                payChannelName() {
+                    return this.payChannelItem ? this.payChannelItem.name : '未选择';
+                },
+                // 面板中正在查看的渠道；未查看时为 null
                 payKeyItem() {
-                    return this.payChannels.find(c => c.key === this.payKey) || this.payChannels[0];
+                    return this.payChannels.find(c => c.key === this.payKey) || null;
                 },
                 // 面板详情行
                 payDetailRows() {
                     const c = this.payKeyItem;
+                    if (!c) return [];
                     return [
                         { k: '适用场景', v: c.scene },
                         { k: '单笔限额', v: c.limit },
                         { k: '到账时效', v: c.eta },
-                        { k: '当前状态', v: c.key === this.payChannel ? '已设为默认支付方式' : '未设为默认' }
+                        { k: '当前状态', v: c.key === this.payChannel ? '本次订单已选' : '未选择' }
                     ];
                 },
                 // 支付二维码（随渠道变化）
@@ -6749,6 +6762,8 @@
                     this.currentUser = user;
                     localStorage.setItem('ctripAuth', JSON.stringify(user));
                     this.showAuthModal = false;
+                    // 登录拿到了后端令牌，此时才有权读 /api/orders，重新拉一次真实订单
+                    if (this.serverToken()) this.loadOrders();
                 },
 
                 isNetError(err) {
@@ -6769,9 +6784,10 @@
                 restoreAuth() {
                     let saved = null;
                     try { saved = JSON.parse(localStorage.getItem('ctripAuth') || 'null'); } catch (e) { }
-                    if (!saved) return;
-                    if (String(saved.token || '').indexOf('local') === 0) { this.currentUser = saved; return; }
-                    this.request('/auth/me?token=' + encodeURIComponent(saved.token || '')).then(d => {
+                    if (!saved) return Promise.resolve();
+                    if (String(saved.token || '').indexOf('local') === 0) { this.currentUser = saved; return Promise.resolve(); }
+                    // 令牌改走 Authorization 头（原先拼在查询串里，会留在访问日志与浏览器历史中）
+                    return this.request('/auth/me', { headers: { 'Authorization': 'Bearer ' + saved.token } }).then(d => {
                         this.currentUser = Object.assign(saved, d);
                     }).catch(() => localStorage.removeItem('ctripAuth'));
                 },
@@ -6843,6 +6859,9 @@
                     }
                     this.currentUser = null;
                     localStorage.removeItem('ctripAuth');
+                    // 退出后没有令牌可读后端订单，回落到本地列表（否则会残留上一个账号的订单）
+                    this.orders = [];
+                    this.loadLocalOrders();
                     this.showNotification('已退出登录');
                 },
 
@@ -6862,16 +6881,62 @@
                 },
 
                 // 请求后端接口，返回 data；业务错误抛 Exception(msg)
+                // 登录后统一携带 Authorization: Bearer <token>；后端 /api/orders 等接口要求登录态
                 request(path, options) {
                     const ctrl = new AbortController();
                     const timer = setTimeout(() => ctrl.abort(), 8000);
-                    return fetch(this.apiBase + path, Object.assign({ signal: ctrl.signal }, options))
+                    const opts = Object.assign({ signal: ctrl.signal }, options);
+                    const token = this.serverToken();
+                    if (token) {
+                        opts.headers = Object.assign({}, opts.headers, { 'Authorization': 'Bearer ' + token });
+                    }
+                    return fetch(this.apiBase + path, opts)
                         .then(res => res.json())
                         .then(json => {
+                            // 401：会话失效，静默清掉本地登录态；是否弹窗引导登录由具体操作决定，
+                            // 避免页面刚加载就弹出登录框
+                            if (json.code === 401) {
+                                this.dropStaleAuth();
+                                throw new Error(json.msg || '请先登录后再操作');
+                            }
                             if (json.code !== 0) throw new Error(json.msg || '服务返回错误');
                             return json.data;
                         })
                         .finally(() => clearTimeout(timer));
+                },
+
+                // 可发给后端的令牌；本地演示模式造的 token（local- 前缀）不外发，返回 null
+                serverToken() {
+                    const t = this.currentUser && this.currentUser.token;
+                    if (!t || String(t).indexOf('local') === 0) return null;
+                    return String(t);
+                },
+
+                // 令牌被后端拒绝时清掉过期登录态，避免后续请求反复 401
+                dropStaleAuth() {
+                    if (!this.currentUser) return;
+                    this.currentUser = null;
+                    try { localStorage.removeItem('ctripAuth'); } catch (e) { }
+                },
+
+                // 订单列表：有后端令牌走 MySQL，否则读本地；后端不可用时静默降级
+                loadOrders() {
+                    if (!this.serverToken()) { this.loadLocalOrders(); return Promise.resolve(); }
+                    return this.request('/orders').then(list => {
+                        this.orders = this.applyOrderMeta(list);
+                        this.mergeFeatureOrders();
+                        this.markMode(true);
+                    }).catch(() => { this.loadLocalOrders(); });
+                },
+
+                loadLocalOrders() {
+                    try {
+                        const saved = localStorage.getItem('travelOrders');
+                        if (saved) this.orders = this.applyOrderMeta(JSON.parse(saved));
+                    } catch (e) {
+                        // 本地数据损坏时忽略
+                    }
+                    this.mergeFeatureOrders();
                 },
 
                 // 搜索统一入口：优先后端，失败降级本地生成
@@ -7525,7 +7590,7 @@
                 // ==================== 支付渠道 ====================
                 // 页脚点击渠道 → 打开支付方式面板并定位到该渠道
                 openPay(key) {
-                    this.payKey = key || this.payChannel;
+                    this.payKey = key || this.payChannel || '';
                     this.showPayModal = true;
                 },
 
@@ -7533,33 +7598,34 @@
                     this.showPayModal = false;
                 },
 
-                // 面板内切换渠道（仅预览详情，点“设为默认”才生效）
+                // 面板内切换渠道（仅预览详情，点“选择此方式”才生效）
                 pickPay(key) {
                     this.payKey = key;
                 },
 
-                // 设为默认支付方式（持久化，刷新后仍生效）
-                setDefaultPay() {
+                // 把面板里正在查看的渠道设为本次订单的支付方式
+                choosePay() {
+                    if (!this.payKey) { this.showNotification('请先选择一个支付方式', true); return; }
                     const item = this.payKeyItem;
                     this.applyPayChannel(this.payKey);
                     this.closePay();
-                    this.showNotification(item.name + ' 已设为默认支付方式');
+                    this.showNotification(item.name + ' 已选为本次支付方式');
                 },
 
-                // 切换支付渠道：换渠道需重新校验
+                // 切换支付渠道：换渠道需重新校验。不持久化，下次下单仍需重新选择
                 applyPayChannel(key) {
                     if (!key || key === this.payChannel) return;
                     this.payChannel = key;
                     this.payVerified = false;
                     this.payVerifyShow = false;
-                    try { localStorage.setItem('ctripPayChannel', key); } catch (e) {}
                 },
 
                 // ==================== 预订流程 ====================
                 openBooking(item) {
                     this.selectedItem = item;
                     this.bookingForm = { choice: '', name: '', phone: '', quantity: 1 };
-                    // 每次下单重新校验支付渠道
+                    // 每一单都重新选择支付方式：不继承上一单的选择，也不给默认值
+                    this.payChannel = '';
                     this.payVerified = false;
 
                     // 已登录时自动填充联系人
@@ -7604,6 +7670,11 @@
                     }
                     if (!/^1[3-9]\d{9}$/.test(this.bookingForm.phone)) {
                         this.showNotification('请输入11位有效手机号码', true);
+                        return;
+                    }
+                    // 支付方式无默认值，必须由用户明确选择后才能进入确认环节
+                    if (!this.payChannel) {
+                        this.showNotification('请选择支付方式', true);
                         return;
                     }
 
@@ -7689,6 +7760,20 @@
                 },
 
                 payOrder() {
+                    // 未选支付方式时不进入校验环节，直接引导用户去选
+                    if (!this.payChannel) {
+                        this.showNotification('请先选择支付方式', true);
+                        this.openPay('');
+                        return;
+                    }
+                    // 后端模式下订单要写入 MySQL，而 /api/orders 已要求登录态：
+                    // 先引导登录，避免用户走完“支付”流程才收到 401
+                    if (this.serverMode === true && !this.serverToken()) {
+                        this.showNotification('请先登录后再提交订单', true);
+                        this.authTab = 'login';
+                        this.showAuthModal = true;
+                        return;
+                    }
                     // 先过渠道校验（扫码 / 卡号后四位 / 短信验证码），通过后再提交订单
                     if (!this.payVerified) {
                         this.payVerifyInput = '';
@@ -7705,7 +7790,7 @@
                     this.payVerified = false;
                     // 锁定本次实付渠道，写入订单便于订单中心展示
                     this.orderInfo.payKey = this.payChannel;
-                    this.orderInfo.payText = this.payChannelItem.name;
+                    this.orderInfo.payText = this.payChannelName;
                     // 后端模式：服务端计价 + 扣库存（防篡改、余票不足会被拒绝）
                     // 特色体验活动、国际/港澳台航班为前端演示数据，MySQL 无对应记录（itemId 为非整数随机值）→ 走本地订单
                     const isActivity = this.orderInfo.type === 'ticket' && this.orderInfo.itemKind === 'activity';
@@ -7720,6 +7805,12 @@
                 // 渠道校验：卡号后四位 / 短信验证码（扫码类点为“我已完成支付”即可通过）
                 completePayVerify() {
                     const c = this.payChannelItem;
+                    // 理论到不了这里（payOrder 已拦截），仍留一道判断防止空渠道取值崩溃
+                    if (!c) {
+                        this.payVerifyShow = false;
+                        this.showNotification('请先选择支付方式', true);
+                        return;
+                    }
                     const val = (this.payVerifyInput || '').trim();
                     if (c.mode === 'card' && !/^\d{4}$/.test(val)) {
                         this.payVerifyErr = '请输入卡号后 4 位数字';
@@ -7833,11 +7924,13 @@
                 },
 
                 clearOrders() {
-                    if (this.serverMode) {
-                        this.request('/orders', { method: 'DELETE' }).then(() => {
+                    if (this.serverMode === true) {
+                        // 后端要求 ?confirm=YES 才执行，且该操作清空整张订单表
+                        this.request('/orders?confirm=YES', { method: 'DELETE' }).then(() => {
                             this.orders = [];
+                            try { localStorage.removeItem('travelOrders'); } catch (e) { }
                             this.showNotification('订单记录已清空（MySQL）');
-                        }).catch(() => this.showNotification('清空订单失败', true));
+                        }).catch(err => this.showNotification((err && err.message) || '清空订单失败', true));
                         return;
                     }
                     this.orders = [];
@@ -8121,26 +8214,11 @@
                 this.vacationForm.date = fmt(tomorrow);
                 this.carForm.date = fmt(tomorrow);
 
-                // 加载订单历史：优先 MySQL，后端不可用时静默降级 localStorage
-                this.request('/orders').then(list => {
-                    this.orders = this.applyOrderMeta(list);
-                    this.mergeFeatureOrders();
-                    this.markMode(true);
-                }).catch(() => {
-                    try {
-                        const saved = localStorage.getItem('travelOrders');
-                        if (saved) {
-                            this.orders = this.applyOrderMeta(JSON.parse(saved));
-                        }
-                    } catch (e) {
-                        // 本地数据损坏时忽略
-                    }
-                    this.mergeFeatureOrders();
-                });
-
                 // 恢复登录状态 + 工具中心历史状态 + 加载首页酒店推荐
+                // 顺序很关键：/api/orders 现在要求登录态，必须先恢复令牌再拉订单，
+                // 否则已登录用户刷新页面也会因无令牌而降级成本地订单
                 this.loadToolState();
-                this.restoreAuth();
+                this.restoreAuth().finally(() => this.loadOrders());
                 this.loadReco(this.recoCity);
 
                 // ESC 关闭弹窗
