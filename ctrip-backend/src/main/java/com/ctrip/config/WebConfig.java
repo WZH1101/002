@@ -6,23 +6,33 @@ import org.springframework.web.servlet.config.annotation.CorsRegistry;
 import org.springframework.web.servlet.config.annotation.InterceptorRegistry;
 import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
+
 /**
  * Web 层配置：跨域策略 + 登录态拦截。
  *
- * <p>跨域默认只放行本地来源（file:// 打开的页面 Origin 为 null，以及 localhost/127.0.0.1 任意端口）。
- * 部署到其它域名时通过配置覆盖，不要退回 *：
+ * <p>跨域默认只放行本地来源（localhost/127.0.0.1 任意端口）。
+ * 以 file:// 直接打开 HTML 的页面 Origin 是 {@code null}，这种来源任何本地网页都能伪装，
+ * 因此单独用开关控制，默认开启只为兼容「双击本地文件演示」的用法：
  * <pre>
- *   ctrip.cors.allowed-origins: https://travel.example.com,https://www.example.com
+ *   ctrip.cors.allow-file-origin: false                    # 上线必关
+ *   ctrip.cors.allowed-origins: https://travel.example.com  # 部署域名，逗号分隔，别退回 *
  * </pre>
  */
 @Configuration
 public class WebConfig implements WebMvcConfigurer {
 
-    /** 允许的本地来源；null 对应浏览器以 file:// 直接打开 HTML 的场景 */
-    private static final String LOCAL_ORIGINS = "null,http://localhost:*,http://127.0.0.1:*";
+    /** 默认放行的本地来源；null（file://）不在此列，由下面的开关决定 */
+    private static final String LOCAL_ORIGINS = "http://localhost:*,http://127.0.0.1:*";
 
     @Value("${ctrip.cors.allowed-origins:" + LOCAL_ORIGINS + "}")
     private String allowedOrigins;
+
+    /** 是否接受 Origin: null（浏览器直接双击打开本地 HTML 的场景）。生产应设为 false */
+    @Value("${ctrip.cors.allow-file-origin:true}")
+    private boolean allowFileOrigin;
 
     private final AuthInterceptor authInterceptor;
 
@@ -32,8 +42,10 @@ public class WebConfig implements WebMvcConfigurer {
 
     @Override
     public void addCorsMappings(CorsRegistry registry) {
+        List<String> origins = new ArrayList<>(Arrays.asList(allowedOrigins.split(",")));
+        if (allowFileOrigin && !origins.contains("null")) origins.add("null");
         registry.addMapping("/api/**")
-                .allowedOriginPatterns(allowedOrigins.split(","))
+                .allowedOriginPatterns(origins.toArray(new String[0]))
                 .allowedMethods("GET", "POST", "DELETE", "OPTIONS")
                 // 显式列举允许的请求头，不再使用 *
                 .allowedHeaders("Content-Type", "Authorization", "X-Token")
