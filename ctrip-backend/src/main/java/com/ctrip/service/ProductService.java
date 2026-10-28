@@ -381,6 +381,40 @@ public class ProductService {
         }
     }
 
+    /**
+     * 回补库存：取消订单时把下单扣掉的量加回去。
+     * 与 {@link #priceAndDeduct} 成对出现——此前只有扣减没有回补，
+     * 删掉订单（或清空订单）后库存永久减少，实测房型余量就是这么被磨掉的。
+     * 同样走 SELECT ... FOR UPDATE，避免与并发下单互相覆盖 JSON 里的计数。
+     */
+    public void restoreStock(String type, long itemId, String choice, int qty) {
+        if (qty <= 0) return;
+        switch (type) {
+            case "hotel" -> addBack("hotel", "rooms", itemId, choice, qty);
+            case "train" -> addBack("train_ticket", "seats", itemId, choice, qty);
+            case "flight" -> addBack("flight", "cabins", itemId, choice, qty);
+            case "vacation" -> addBack("vacation_product", "packages", itemId, choice, qty);
+            case "bus" -> jdbc.update("UPDATE bus_ticket SET seats = seats + ? WHERE id = ?", qty, itemId);
+            case "ship" -> jdbc.update("UPDATE ship_ticket SET seats = seats + ? WHERE id = ?", qty, itemId);
+            case "car" -> jdbc.update("UPDATE car_product SET stock = stock + ? WHERE id = ?", qty, itemId);
+            case "shop" -> jdbc.update("UPDATE global_shop SET stock = stock + ? WHERE id = ?", qty, itemId);
+            case "gift" -> jdbc.update("UPDATE gift_card SET stock = stock + ? WHERE id = ?", qty, itemId);
+            // attraction：票种不占库存计数，无需回补
+            default -> { }
+        }
+    }
+
+    /** JSON 库存列里的某个 SKU 数量加回 qty；SKU 已被删除时静默跳过（不能凭空造一条） */
+    private void addBack(String table, String column, long itemId, String choice, int qty) {
+        String json = lockJson(table, column, itemId);
+        List<Map<String, Object>> list = parse(json);
+        Map<String, Object> sku = findByName(list, choice);
+        if (sku == null) return;
+        int count = (int) dbl(sku.getOrDefault("count", 0));
+        sku.put("count", count + qty);
+        updateJson(table, column, itemId, toJson(list));
+    }
+
     private Map<String, Object> priceResult(double unit, double total) {
         Map<String, Object> m = new LinkedHashMap<>();
         m.put("unitPrice", tidy(unit));

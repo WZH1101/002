@@ -2,6 +2,7 @@ package com.ctrip.controller;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -18,10 +19,15 @@ public class IndexController {
     private static final Logger log = LoggerFactory.getLogger(IndexController.class);
 
     /** 状态页允许统计的表，写死白名单；即使将来有人往 count() 传外部参数也不会拼进 SQL */
-    private static final Set<String> STAT_TABLES =
-            Set.of("hotel", "attraction", "train_ticket", "flight", "bus_ticket", "travel_order");
+    private static final Set<String> STAT_TABLES = Set.of(
+            "hotel", "attraction", "train_ticket", "flight", "bus_ticket", "travel_order",
+            "app_user", "user_session");
 
     private final JdbcTemplate jdbc;
+
+    /** 支付窗口，状态页要说清楚超时多久自动取消，和 OrderService 读同一个配置项 */
+    @Value("${ctrip.order.pay-deadline-minutes:15}")
+    private int payDeadlineMinutes;
 
     public IndexController(JdbcTemplate jdbc) {
         this.jdbc = jdbc;
@@ -37,9 +43,12 @@ public class IndexController {
             long flights = count("flight");
             long buses = count("bus_ticket");
             long orders = count("travel_order");
+            long users = count("app_user");
+            long sessions = count("user_session");
             stats = "<table>"
                     + row("酒店", hotels) + row("景点门票", spots) + row("火车票", trains)
                     + row("航班", flights) + row("汽车票班次", buses) + row("订单", orders)
+                    + row("账号", users) + row("会话记录", sessions)
                     + "</table>";
         } catch (Exception e) {
             // 原始异常只记日志，不把驱动报错/库名/连接串回显到公开页面
@@ -81,14 +90,19 @@ public class IndexController {
                       <li><code>GET /api/flights?from=北京&amp;to=上海</code> 机票搜索</li>
                       <li><code>GET /api/buses?from=北京&amp;to=天津</code> 汽车票搜索</li>
                       <li><code>POST /api/auth/register|login|logout</code>、<code>GET /api/auth/me</code> 账号与登录态</li>
-                      <li><code>POST/GET/DELETE /api/orders</code> 下单 / 订单列表 / 清空订单 · <b>需登录，只操作本人订单</b></li>
+                      <li><code>POST /api/auth/password</code> 修改密码 · <b>改密后全端令牌失效</b></li>
+                      <li><code>POST /api/orders</code> 下单（生成<b>待支付</b>订单并锁定库存）· <code>GET /api/orders</code> 本人订单列表</li>
+                      <li><code>POST /api/orders/{orderNo}/pay|cancel|refund</code> 支付 / 取消 / 退款 · <code>DELETE /api/orders/{orderNo}</code> 删除已取消或已退款订单</li>
+                      <li><code>DELETE /api/orders?confirm=YES</code> 批量取消本人全部待支付订单</li>
+                      <li>待支付订单超过 <code>__PAY_WINDOW__</code> 分钟未支付，由定时任务自动取消并回补库存</li>
                     </ul>
                     <div class="sub">提示：前端页面请直接打开本地文件「悦途旅行预订.html」，页面会自动调用以上接口。</div>
                     <a class="btn" href="/api/hotels?city=%E5%8C%97%E4%BA%AC" target="_blank">测试酒店接口 →</a>
                   </div>
                 </body>
                 </html>
-                """.replace("__STATS__", stats);
+                """.replace("__STATS__", stats)
+                .replace("__PAY_WINDOW__", String.valueOf(payDeadlineMinutes));
     }
 
     private long count(String table) {

@@ -17,14 +17,27 @@ spring:
   jackson:
     default-property-inclusion: non_null
 
-# 跨域允许来源。默认只放行 file:// 打开页面（Origin 为 null）与 localhost/127.0.0.1 任意端口；
-# 部署到独立域名时改成具体来源，多个用逗号分隔，不要退回 *。
-#   ctrip:
-#     cors:
-#       allowed-origins: https://travel.example.com
-#ctrip:
-#  cors:
-#    allowed-origins: null,http://localhost:*,http://127.0.0.1:*
+# 跨域与鉴权相关的自有配置（详见 WebConfig / AuthInterceptor）
+ctrip:
+  cors:
+    # 部署到独立域名时改成具体来源，多个用逗号分隔，不要退回 *
+    allowed-origins: http://localhost:*,http://127.0.0.1:*
+    # 是否接受 Origin: null —— 浏览器双击本地 HTML 的场景。
+    # 本地演示保持 true；一旦服务对外可达就设 false，否则任何本地网页都能冒充页面来源。
+    allow-file-origin: true
+  auth:
+    # 防刷阈值，默认值按「服务可能被外人访问」设定。
+    # 跑 qa/smoke.sh 时一个小时内会注册好几个测试账号，若被 max-register-per-hour 限流，
+    # 脚本会给出提示：把下面的值临时调大再重启后端即可（跑完记得改回来）。
+    max-login-failures: 5
+    lock-minutes: 15
+    max-register-per-hour: 5
+  order:
+    # 支付窗口（分钟）：下单只是锁定库存并生成「待支付」订单，超过这个时间没付就由
+    # OrderExpiryTask 自动取消并回补库存。演示时想马上看到超时效果，改成 1 即可。
+    pay-deadline-minutes: 15
+    # 超时扫描间隔（毫秒），fixedDelay——上一轮跑完才开始计时，避免慢查询叠加
+    expiry-scan-ms: 60000
 
 logging:
   level:

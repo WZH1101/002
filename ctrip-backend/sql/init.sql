@@ -50,15 +50,23 @@ CREATE TABLE bus_ticket (
 CREATE TABLE travel_order (
   id BIGINT AUTO_INCREMENT PRIMARY KEY,
   order_no VARCHAR(32) NOT NULL UNIQUE,
+  idem_key VARCHAR(64),                 -- 客户端幂等键：同一人重复提交只入库一次（唯一约束见下方 uk_order_idem）
   type VARCHAR(16) NOT NULL, item_id BIGINT,
   user_id BIGINT,
   title VARCHAR(256), date_text VARCHAR(128), choice_text VARCHAR(64),
   quantity INT NOT NULL, unit_price DECIMAL(10,2), total_price DECIMAL(10,2),
   contact_name VARCHAR(32), phone VARCHAR(16),
-  status VARCHAR(16) DEFAULT '已支付', pay_time DATETIME,
+  status VARCHAR(16) DEFAULT '待支付',  -- 待支付 / 已支付 / 已取消 / 已退款
+  pay_time DATETIME, cancel_time DATETIME, refund_time DATETIME,
+  pay_deadline DATETIME,               -- 待支付订单的支付截止；超时由 OrderExpiryTask 自动取消并回补库存
   create_time DATETIME DEFAULT CURRENT_TIMESTAMP,
+  -- 定时任务每分钟按 (status, pay_deadline) 扫超时未支付订单，没这个索引就是全表扫
+  KEY idx_order_status_deadline (status, pay_deadline),
   KEY idx_order_type (type),
-  KEY idx_order_user (user_id)
+  KEY idx_order_user (user_id),
+  -- 幂等键按「人」唯一，而不是全局唯一：前端订单号是 C+毫秒时间戳，
+  -- 两个人同一毫秒下单并不冲突，全局唯一会把第二个人的正常订单误判成重复提交
+  UNIQUE KEY uk_order_idem (idem_key, user_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- 真实酒店数据（名称/星级/价格参照平台公开价）
@@ -313,7 +321,19 @@ CREATE TABLE IF NOT EXISTS app_user (
   salt VARCHAR(64) NOT NULL,
   nickname VARCHAR(50),
   phone VARCHAR(20),
+  auth_ver INT NOT NULL DEFAULT 0,   -- 凭证版本号：改密码即 +1，旧令牌随之全部失效
   create_time DATETIME DEFAULT CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- 2026-10-28 新增：登录会话表（此前会话只存内存，重启即全员掉线、也无法多实例共享）
+CREATE TABLE IF NOT EXISTS user_session (
+  token CHAR(32) PRIMARY KEY,
+  user_id BIGINT NOT NULL,
+  auth_ver INT NOT NULL DEFAULT 0,   -- 签发时的凭证版本，与 app_user.auth_ver 不一致即视为失效
+  expire_time DATETIME NOT NULL,
+  create_time DATETIME DEFAULT CURRENT_TIMESTAMP,
+  KEY idx_session_user (user_id),
+  KEY idx_session_expire (expire_time)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- 2026-10-25 新增：拓展模块表（旅游/用车/礼品卡/全球购/企业商旅），种子数据见 tools/seed-modules.js
