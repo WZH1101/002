@@ -1,0 +1,18 @@
+server:
+  port: 8080
+
+spring:
+  datasource:
+    url: jdbc:mysql://localhost:3306/ctrip_travel?useUnicode=true&characterEncoding=utf8&useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true
+    username: root
+    # 数据库密码：与 reset-mysql-password.bat 重置后的密码一致，可用环境变量 CTRIP_DB_PASSWORD 覆盖
+    password: ${CTRIP_DB_PASSWORD:Ctrip@123456}
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    hikari:
+      maximum-pool-size: 10
+  jackson:
+    default-property-inclusion: non_null
+
+logging:
+  level:
+    com.ctrip: info

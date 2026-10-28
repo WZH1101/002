@@ -1,0 +1,89 @@
+package com.ctrip.controller;
+
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RestController;
+
+/**
+ * 根路径状态页：访问 http://localhost:8080/ 时展示服务状态与接口清单，
+ * 替代 Spring Boot 默认的 Whitelabel 404 兜底页。
+ */
+@RestController
+public class IndexController {
+
+    private final JdbcTemplate jdbc;
+
+    public IndexController(JdbcTemplate jdbc) {
+        this.jdbc = jdbc;
+    }
+
+    @GetMapping(value = {"/", "/index.html"}, produces = "text/html;charset=UTF-8")
+    public String index() {
+        String stats;
+        try {
+            long hotels = count("hotel");
+            long spots = count("attraction");
+            long trains = count("train_ticket");
+            long flights = count("flight");
+            long buses = count("bus_ticket");
+            long orders = count("travel_order");
+            stats = "<table>"
+                    + row("酒店", hotels) + row("景点门票", spots) + row("火车票", trains)
+                    + row("航班", flights) + row("汽车票班次", buses) + row("订单", orders)
+                    + "</table>";
+        } catch (Exception e) {
+            stats = "<p class='bad'>⚠ 数据库连接异常：" + e.getMessage() + "</p>";
+        }
+        return """
+                <!DOCTYPE html>
+                <html lang="zh-CN">
+                <head>
+                <meta charset="UTF-8">
+                <title>悦途预订平台 · 后端服务</title>
+                <style>
+                  body{font-family:"Microsoft YaHei",sans-serif;background:#f5f7fa;margin:0;padding:40px;color:#333}
+                  .card{max-width:720px;margin:0 auto;background:#fff;border-radius:12px;padding:32px 40px;box-shadow:0 4px 16px rgba(0,0,0,.08)}
+                  h1{margin:0 0 4px;font-size:22px}
+                  h1 .ok{color:#1fa971;font-size:14px;font-weight:normal}
+                  .sub{color:#888;font-size:13px;margin-bottom:20px}
+                  table{border-collapse:collapse;width:100%;margin-bottom:20px}
+                  td{border-bottom:1px solid #eee;padding:8px 4px;font-size:14px}
+                  td:last-child{text-align:right;font-weight:bold;color:#2577e3}
+                  code{background:#eef3fb;color:#2577e3;padding:2px 8px;border-radius:4px;font-size:13px}
+                  li{margin:8px 0;font-size:14px}
+                  .bad{color:#e04c4c}
+                  a.btn{display:inline-block;margin-top:16px;background:#2577e3;color:#fff;text-decoration:none;padding:10px 22px;border-radius:6px;font-size:14px}
+                </style>
+                </head>
+                <body>
+                  <div class="card">
+                    <h1>悦途预订平台 · Java 后端服务 <span class="ok">● 运行中</span></h1>
+                    <div class="sub">Spring Boot 3.2.5 + MySQL 8 · 端口 8080</div>
+                    <h3 style="font-size:15px;margin:0 0 8px">📊 数据库实时统计</h3>
+                    __STATS__
+                    <h3 style="font-size:15px;margin:16px 0 8px">🔌 可用接口</h3>
+                    <ul>
+                      <li><code>GET /api/hotels?city=北京</code> 酒店搜索</li>
+                      <li><code>GET /api/attractions?city=杭州</code> 景点门票搜索</li>
+                      <li><code>GET /api/trains?from=北京&amp;to=上海</code> 火车票搜索</li>
+                      <li><code>GET /api/flights?from=北京&amp;to=上海</code> 机票搜索</li>
+                      <li><code>GET /api/buses?from=北京&amp;to=天津</code> 汽车票搜索</li>
+                      <li><code>POST/GET/DELETE /api/orders</code> 下单 / 订单列表 / 清空订单</li>
+                    </ul>
+                    <div class="sub">提示：前端页面请直接打开本地文件「悦途旅行预订.html」，页面会自动调用以上接口。</div>
+                    <a class="btn" href="/api/hotels?city=%E5%8C%97%E4%BA%AC" target="_blank">测试酒店接口 →</a>
+                  </div>
+                </body>
+                </html>
+                """.replace("__STATS__", stats);
+    }
+
+    private long count(String table) {
+        Long n = jdbc.queryForObject("SELECT COUNT(*) FROM " + table, Long.class);
+        return n == null ? 0 : n;
+    }
+
+    private String row(String name, long n) {
+        return "<tr><td>" + name + "</td><td>" + n + " 条</td></tr>";
+    }
+}

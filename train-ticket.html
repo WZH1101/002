@@ -1,0 +1,1761 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>12306火车票预订系统</title>
+    <link rel="preconnect" href="https://cdn.jsdelivr.net">
+    <link rel="preconnect" href="https://cdnjs.cloudflare.com" crossorigin>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- 生产版 Vue：体积更小且无开发模式提示 -->
+    <script src="https://cdn.jsdelivr.net/npm/vue@2.6.14/dist/vue.min.js"></script>
+    <script>
+        // CDN 降级：jsDelivr 加载失败时回退到 unpkg
+        if (typeof window.Vue === 'undefined') {
+            document.write('<script src="https://unpkg.com/vue@2.6.14/dist/vue.min.js"><\/script>');
+        }
+    </script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Microsoft YaHei', 'Segoe UI', Tahoma, sans-serif;
+        }
+
+        body {
+            background-color: #f5f5f5;
+            color: #333;
+        }
+
+        /* 顶部导航 */
+        .top-bar {
+            background: linear-gradient(to bottom, #2b5caa, #1e4a8a);
+            color: white;
+            padding: 8px 0;
+            font-size: 13px;
+        }
+
+        .top-bar .container {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .top-bar a {
+            color: white;
+            text-decoration: none;
+            margin-left: 15px;
+            cursor: pointer;
+        }
+
+        .top-bar a:hover {
+            text-decoration: underline;
+        }
+
+        /* 头部 */
+        header {
+            background: linear-gradient(to bottom, #3a6fb5, #2b5caa);
+            color: white;
+            padding: 20px 0;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+        }
+
+        .header-content {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .logo {
+            display: flex;
+            align-items: center;
+            font-size: 32px;
+            font-weight: bold;
+        }
+
+        .logo img {
+            width: 50px;
+            height: 50px;
+            margin-right: 12px;
+        }
+
+        .logo-text {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .logo-subtitle {
+            font-size: 14px;
+            font-weight: normal;
+            opacity: 0.9;
+        }
+
+        .user-info {
+            display: flex;
+            align-items: center;
+            gap: 20px;
+        }
+
+        .user-info .btn-login {
+            padding: 8px 20px;
+            background: rgba(255,255,255,0.2);
+            border: 1px solid white;
+            border-radius: 4px;
+            color: white;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .user-info .btn-login:hover {
+            background: white;
+            color: #2b5caa;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 0 15px;
+        }
+
+        /* 查询表单 */
+        .search-section {
+            background: white;
+            margin: -30px auto 20px;
+            max-width: 1200px;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+            padding: 30px;
+            position: relative;
+            z-index: 10;
+        }
+
+        .search-tabs {
+            display: flex;
+            gap: 5px;
+            margin-bottom: 25px;
+            border-bottom: 2px solid #e8e8e8;
+        }
+
+        .search-tab {
+            padding: 10px 25px;
+            cursor: pointer;
+            font-size: 16px;
+            border-bottom: 3px solid transparent;
+            transition: all 0.3s;
+            color: #666;
+        }
+
+        .search-tab.active {
+            color: #2b5caa;
+            border-bottom-color: #2b5caa;
+            font-weight: bold;
+        }
+
+        .search-form {
+            display: flex;
+            gap: 15px;
+            align-items: flex-end;
+            flex-wrap: wrap;
+        }
+
+        .form-group {
+            flex: 1;
+            min-width: 150px;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 8px;
+            font-size: 14px;
+            color: #666;
+            font-weight: 500;
+        }
+
+        .form-group input, .form-group select {
+            width: 100%;
+            padding: 12px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 15px;
+            transition: border-color 0.3s;
+        }
+
+        .form-group input:focus, .form-group select:focus {
+            outline: none;
+            border-color: #2b5caa;
+        }
+
+        .swap-btn {
+            width: 40px;
+            height: 40px;
+            border: none;
+            background: #f0f0f0;
+            border-radius: 50%;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.3s;
+            align-self: flex-end;
+            margin-bottom: 2px;
+        }
+
+        .swap-btn:hover {
+            background: #2b5caa;
+            color: white;
+        }
+
+        .search-btn {
+            padding: 12px 50px;
+            background: linear-gradient(to bottom, #ff9800, #f57c00);
+            color: white;
+            border: none;
+            border-radius: 4px;
+            font-size: 16px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.3s;
+            white-space: nowrap;
+        }
+
+        .search-btn:hover {
+            background: linear-gradient(to bottom, #f57c00, #e65100);
+            transform: translateY(-1px);
+            box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+        }
+
+        /* 筛选条件 */
+        .filter-section {
+            background: white;
+            padding: 15px 30px;
+            margin-bottom: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+        }
+
+        .filter-group {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+
+        .filter-group:last-child {
+            margin-bottom: 0;
+        }
+
+        .filter-label {
+            font-size: 14px;
+            color: #666;
+            min-width: 70px;
+        }
+
+        .filter-options {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+
+        .filter-option {
+            padding: 5px 12px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 13px;
+            transition: all 0.3s;
+            background: white;
+        }
+
+        .filter-option:hover, .filter-option.active {
+            background: #2b5caa;
+            color: white;
+            border-color: #2b5caa;
+        }
+
+        /* 车次列表 */
+        .train-list {
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+            overflow: hidden;
+        }
+
+        .train-header {
+            display: grid;
+            grid-template-columns: 1.2fr 1.5fr 1fr 1fr repeat(5, 0.8fr) 0.8fr;
+            background: #f8f9fa;
+            padding: 15px 20px;
+            font-size: 13px;
+            color: #666;
+            font-weight: 500;
+            border-bottom: 2px solid #e8e8e8;
+        }
+
+        .train-item {
+            display: grid;
+            grid-template-columns: 1.2fr 1.5fr 1fr 1fr repeat(5, 0.8fr) 0.8fr;
+            padding: 20px;
+            border-bottom: 1px solid #f0f0f0;
+            align-items: center;
+            transition: background 0.3s;
+            cursor: pointer;
+        }
+
+        .train-item:hover {
+            background: #f8f9ff;
+        }
+
+        .train-no {
+            font-weight: bold;
+            color: #2b5caa;
+            font-size: 16px;
+        }
+
+        .train-type {
+            font-size: 12px;
+            color: #999;
+            margin-top: 3px;
+        }
+
+        .time-info {
+            text-align: center;
+        }
+
+        .time {
+            font-size: 20px;
+            font-weight: bold;
+            color: #333;
+        }
+
+        .station {
+            font-size: 13px;
+            color: #666;
+            margin-top: 3px;
+        }
+
+        .duration {
+            text-align: center;
+            color: #999;
+            font-size: 14px;
+        }
+
+        .seat-info {
+            text-align: center;
+            font-size: 14px;
+        }
+
+        .seat-count {
+            color: #52c41a;
+            font-weight: 500;
+        }
+
+        .seat-count.low {
+            color: #ff4d4f;
+        }
+
+        .seat-count.none {
+            color: #999;
+        }
+
+        .price {
+            text-align: center;
+            font-size: 16px;
+            font-weight: bold;
+            color: #ff4d4f;
+        }
+
+        .book-btn {
+            padding: 8px 16px;
+            background: #2b5caa;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 13px;
+            transition: all 0.3s;
+        }
+
+        .book-btn:hover {
+            background: #1e4a8a;
+        }
+
+        .book-btn.disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+
+        /* 弹窗 */
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0,0,0,0.5);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+        }
+
+        .modal {
+            background: white;
+            border-radius: 8px;
+            width: 90%;
+            max-width: 600px;
+            max-height: 90vh;
+            overflow-y: auto;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.2);
+        }
+
+        .modal-header {
+            padding: 20px 25px;
+            border-bottom: 1px solid #e8e8e8;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .modal-title {
+            font-size: 20px;
+            font-weight: bold;
+            color: #333;
+        }
+
+        .modal-close {
+            width: 32px;
+            height: 32px;
+            border: none;
+            background: none;
+            font-size: 24px;
+            cursor: pointer;
+            color: #999;
+            border-radius: 50%;
+            transition: all 0.3s;
+        }
+
+        .modal-close:hover {
+            background: #f0f0f0;
+            color: #333;
+        }
+
+        .modal-body {
+            padding: 25px;
+        }
+
+        .modal-footer {
+            padding: 15px 25px;
+            border-top: 1px solid #e8e8e8;
+            display: flex;
+            justify-content: flex-end;
+            gap: 10px;
+        }
+
+        /* 订单表单 */
+        .order-form .form-row {
+            display: flex;
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+
+        .order-form .form-row .form-group {
+            flex: 1;
+        }
+
+        .passenger-list {
+            border: 1px solid #e8e8e8;
+            border-radius: 4px;
+            padding: 15px;
+            margin-bottom: 20px;
+        }
+
+        .passenger-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px 0;
+            border-bottom: 1px solid #f0f0f0;
+        }
+
+        .passenger-item:last-child {
+            border-bottom: none;
+        }
+
+        .btn-primary {
+            padding: 10px 30px;
+            background: #2b5caa;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 15px;
+            transition: all 0.3s;
+        }
+
+        .btn-primary:hover {
+            background: #1e4a8a;
+        }
+
+        .btn-default {
+            padding: 10px 30px;
+            background: white;
+            color: #666;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 15px;
+            transition: all 0.3s;
+        }
+
+        .btn-default:hover {
+            background: #f5f5f5;
+        }
+
+        /* 座位选择 */
+        .seat-selection {
+            margin: 20px 0;
+        }
+
+        .seat-type-label {
+            font-size: 15px;
+            font-weight: 500;
+            margin-bottom: 10px;
+            color: #333;
+        }
+
+        .seat-options {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+        .seat-option {
+            padding: 10px 20px;
+            border: 2px solid #e8e8e8;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: all 0.3s;
+            text-align: center;
+        }
+
+        .seat-option:hover {
+            border-color: #2b5caa;
+        }
+
+        .seat-option.selected {
+            border-color: #2b5caa;
+            background: #f0f7ff;
+        }
+
+        .seat-option .seat-name {
+            font-size: 14px;
+            color: #333;
+            margin-bottom: 5px;
+        }
+
+        .seat-option .seat-price {
+            font-size: 16px;
+            font-weight: bold;
+            color: #ff4d4f;
+        }
+
+        /* 订单确认 */
+        .order-info {
+            background: #f8f9fa;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+
+        .order-info-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 8px 0;
+            font-size: 14px;
+        }
+
+        .order-info-row.total {
+            border-top: 2px solid #e8e8e8;
+            margin-top: 10px;
+            padding-top: 15px;
+            font-size: 18px;
+            font-weight: bold;
+            color: #ff4d4f;
+        }
+
+        /* 成功页面 */
+        .success-page {
+            text-align: center;
+            padding: 60px 20px;
+        }
+
+        .success-icon {
+            width: 80px;
+            height: 80px;
+            background: #52c41a;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 0 auto 25px;
+            font-size: 40px;
+            color: white;
+        }
+
+        .success-title {
+            font-size: 24px;
+            font-weight: bold;
+            margin-bottom: 15px;
+            color: #333;
+        }
+
+        .success-message {
+            font-size: 16px;
+            color: #666;
+            margin-bottom: 30px;
+        }
+
+        .order-details {
+            background: #f8f9fa;
+            padding: 25px;
+            border-radius: 8px;
+            max-width: 500px;
+            margin: 0 auto 30px;
+            text-align: left;
+        }
+
+        .order-detail-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 10px 0;
+            border-bottom: 1px solid #e8e8e8;
+        }
+
+        .order-detail-row:last-child {
+            border-bottom: none;
+        }
+
+        .order-detail-label {
+            color: #999;
+        }
+
+        .order-detail-value {
+            font-weight: 500;
+            color: #333;
+        }
+
+        /* 页脚 */
+        footer {
+            background: #2c3e50;
+            color: white;
+            padding: 40px 0 20px;
+            margin-top: 50px;
+        }
+
+        .footer-content {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 30px;
+            margin-bottom: 30px;
+        }
+
+        .footer-section h3 {
+            font-size: 16px;
+            margin-bottom: 15px;
+            color: #ecf0f1;
+        }
+
+        .footer-section ul {
+            list-style: none;
+        }
+
+        .footer-section ul li {
+            padding: 5px 0;
+            font-size: 14px;
+            color: #95a5a6;
+            cursor: pointer;
+            transition: color 0.3s;
+        }
+
+        .footer-section ul li:hover {
+            color: white;
+        }
+
+        .footer-bottom {
+            text-align: center;
+            padding-top: 20px;
+            border-top: 1px solid #34495e;
+            font-size: 13px;
+            color: #95a5a6;
+        }
+
+        /* 通知（支持队列，多条不互相覆盖） */
+        .notification-wrap {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            z-index: 2000;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            pointer-events: none;
+        }
+
+        .notification {
+            background: #52c41a;
+            color: white;
+            padding: 15px 25px;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            animation: notif-in 0.3s ease;
+        }
+
+        .notification.error {
+            background: #ff4d4f;
+        }
+
+        @keyframes notif-in {
+            from { transform: translateX(400px); opacity: 0; }
+            to { transform: translateX(0); opacity: 1; }
+        }
+
+        /* 弹窗过渡动画 */
+        .fade-enter-active, .fade-leave-active {
+            transition: opacity 0.25s ease;
+        }
+
+        .fade-enter-active .modal, .fade-leave-active .modal {
+            transition: transform 0.25s ease;
+        }
+
+        .fade-enter, .fade-leave-to {
+            opacity: 0;
+        }
+
+        .fade-enter .modal, .fade-leave-to .modal {
+            transform: translateY(20px) scale(0.96);
+        }
+
+        /* 返程标签 */
+        .direction-tag {
+            display: inline-block;
+            margin-left: 6px;
+            padding: 1px 6px;
+            font-size: 11px;
+            color: #f57c00;
+            border: 1px solid #ffb25e;
+            border-radius: 3px;
+            vertical-align: middle;
+        }
+
+        /* 结果计数 */
+        .result-count {
+            padding: 10px 20px;
+            background: #f8f9fa;
+            color: #666;
+            font-size: 13px;
+            border-bottom: 1px solid #e8e8e8;
+        }
+
+        .result-count b {
+            color: #2b5caa;
+        }
+
+        /* 订单历史 */
+        .order-history-list {
+            max-height: 50vh;
+            overflow-y: auto;
+        }
+
+        .order-history-item {
+            border: 1px solid #e8e8e8;
+            border-radius: 8px;
+            padding: 15px;
+            margin-bottom: 12px;
+        }
+
+        .order-history-item:last-child {
+            margin-bottom: 0;
+        }
+
+        .order-history-head {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+            font-weight: 500;
+        }
+
+        .order-status {
+            color: #52c41a;
+            font-size: 13px;
+        }
+
+        .order-history-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 4px 0;
+            font-size: 13px;
+            color: #666;
+        }
+
+        .order-empty {
+            text-align: center;
+            color: #999;
+            padding: 40px 0;
+        }
+
+        /* 响应式 */
+        @media (max-width: 768px) {
+            .search-form {
+                flex-direction: column;
+            }
+
+            .form-group {
+                min-width: 100%;
+            }
+
+            .train-header,
+            .train-item {
+                grid-template-columns: 1fr;
+                gap: 10px;
+            }
+
+            .train-header {
+                display: none;
+            }
+
+            .footer-content {
+                grid-template-columns: repeat(2, 1fr);
+            }
+        }
+
+        /* 骨架屏加载 */
+        .skeleton-list {
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+            overflow: hidden;
+        }
+
+        .skeleton-item {
+            display: grid;
+            grid-template-columns: repeat(6, 1fr);
+            gap: 20px;
+            padding: 20px;
+            border-bottom: 1px solid #f0f0f0;
+        }
+
+        .skeleton-block {
+            height: 18px;
+            border-radius: 4px;
+            background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
+            background-size: 200% 100%;
+            animation: shimmer 1.2s ease infinite;
+        }
+
+        @keyframes shimmer {
+            0% { background-position: 200% 0; }
+            100% { background-position: -200% 0; }
+        }
+
+        /* 无结果 */
+        .no-results {
+            text-align: center;
+            padding: 60px 20px;
+            color: #999;
+        }
+
+        .no-results i {
+            font-size: 64px;
+            margin-bottom: 20px;
+            color: #ddd;
+        }
+
+        .no-results p {
+            font-size: 16px;
+        }
+    </style>
+</head>
+<body>
+    <div id="app">
+        <!-- 顶部栏 -->
+        <div class="top-bar">
+            <div class="container">
+                <div>
+                    <span>中国铁路客户服务中心</span>
+                </div>
+                <div>
+                    <a @click="showOrders">我的订单</a>
+                    <a @click="showNotification('功能开发中...', true)">客服中心</a>
+                    <a @click="showNotification('功能开发中...', true)"> English</a>
+                </div>
+            </div>
+        </div>
+
+        <!-- 头部 -->
+        <header>
+            <div class="container">
+                <div class="header-content">
+                    <div class="logo">
+                        <i class="fas fa-train" style="font-size: 40px; margin-right: 12px;"></i>
+                        <div class="logo-text">
+                            <span>12306</span>
+                            <span class="logo-subtitle">中国铁路客户服务中心</span>
+                        </div>
+                    </div>
+                    <div class="user-info">
+                        <button class="btn-login" @click="showNotification('登录功能开发中...', true)">
+                            <i class="fas fa-user"></i> 登录
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </header>
+
+        <!-- 查询区域 -->
+        <div class="container">
+            <div class="search-section">
+                <div class="search-tabs">
+                    <div class="search-tab" :class="{active: searchType === 'single'}" @click="searchType = 'single'">
+                        单程
+                    </div>
+                    <div class="search-tab" :class="{active: searchType === 'round'}" @click="searchType = 'round'">
+                        往返
+                    </div>
+                </div>
+
+                <div class="search-form">
+                    <div class="form-group">
+                        <label>出发地</label>
+                        <input type="text" v-model="searchForm.from" placeholder="请输入出发城市" list="city-list">
+                    </div>
+
+                    <button class="swap-btn" @click="swapCities" title="交换城市">
+                        <i class="fas fa-exchange-alt"></i>
+                    </button>
+
+                    <div class="form-group">
+                        <label>目的地</label>
+                        <input type="text" v-model="searchForm.to" placeholder="请输入目的城市" list="city-list">
+                    </div>
+
+                    <datalist id="city-list">
+                        <option v-for="city in cities" :key="city" :value="city"></option>
+                    </datalist>
+
+                    <div class="form-group">
+                        <label>出发日期</label>
+                        <input type="date" v-model="searchForm.date" :min="today">
+                    </div>
+
+                    <div class="form-group" v-if="searchType === 'round'">
+                        <label>返程日期</label>
+                        <input type="date" v-model="searchForm.returnDate" :min="searchForm.date || today">
+                    </div>
+
+                    <div class="form-group">
+                        <label>车次类型</label>
+                        <select v-model="searchForm.trainType">
+                            <option value="all">全部</option>
+                            <option value="G">高铁(G)</option>
+                            <option value="D">动车(D)</option>
+                            <option value="Z">直达(Z)</option>
+                            <option value="T">特快(T)</option>
+                            <option value="K">快速(K)</option>
+                        </select>
+                    </div>
+
+                    <button class="search-btn" @click="searchTrains">
+                        <i class="fas fa-search"></i> 查询车票
+                    </button>
+                </div>
+            </div>
+
+            <!-- 筛选区域 -->
+            <div class="filter-section" v-if="trains.length > 0">
+                <div class="filter-group">
+                    <span class="filter-label">出发时间:</span>
+                    <div class="filter-options">
+                        <span class="filter-option" :class="{active: timeFilter === 'all'}" @click="timeFilter = 'all'">全部</span>
+                        <span class="filter-option" :class="{active: timeFilter === 'morning'}" @click="timeFilter = 'morning'">上午(6-12)</span>
+                        <span class="filter-option" :class="{active: timeFilter === 'afternoon'}" @click="timeFilter = 'afternoon'">下午(12-18)</span>
+                        <span class="filter-option" :class="{active: timeFilter === 'evening'}" @click="timeFilter = 'evening'">晚上(18-24)</span>
+                    </div>
+                </div>
+                <div class="filter-group">
+                    <span class="filter-label">排序方式:</span>
+                    <div class="filter-options">
+                        <span class="filter-option" :class="{active: sortBy === 'departure'}" @click="sortBy = 'departure'">出发时间</span>
+                        <span class="filter-option" :class="{active: sortBy === 'duration'}" @click="sortBy = 'duration'">历时最短</span>
+                        <span class="filter-option" :class="{active: sortBy === 'price'}" @click="sortBy = 'price'">价格最低</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 车次列表 -->
+            <div class="train-list" v-if="trains.length > 0">
+                <div class="result-count">
+                    共 <b>{{ trains.length }}</b> 个车次，当前显示 <b>{{ filteredTrains.length }}</b> 个
+                </div>
+                <div class="train-header">
+                    <div>车次</div>
+                    <div>出发站</div>
+                    <div>出发时间</div>
+                    <div>到达时间</div>
+                    <div>历时</div>
+                    <div>商务座</div>
+                    <div>一等座</div>
+                    <div>二等座</div>
+                    <div>价格</div>
+                    <div>操作</div>
+                </div>
+
+                <div class="train-item" v-for="train in filteredTrains" :key="train.id">
+                    <div>
+                        <div class="train-no">{{ train.trainNo }}</div>
+                        <div class="train-type">{{ train.typeName }}<span class="direction-tag" v-if="train.direction === '返程'">返程</span></div>
+                    </div>
+                    <div class="time-info">
+                        <div class="station">{{ train.fromStation }}</div>
+                        <div style="font-size: 12px; color: #999;">→ {{ train.toStation }}</div>
+                    </div>
+                    <div class="time-info">
+                        <div class="time">{{ train.departureTime }}</div>
+                    </div>
+                    <div class="time-info">
+                        <div class="time">{{ train.arrivalTime }}</div>
+                    </div>
+                    <div class="duration">{{ train.duration }}</div>
+                    <div class="seat-info">
+                        <span :class="['seat-count', {low: train.businessSeats < 10, none: train.businessSeats === 0}]">
+                            {{ train.businessSeats > 0 ? train.businessSeats + '张' : '无' }}
+                        </span>
+                    </div>
+                    <div class="seat-info">
+                        <span :class="['seat-count', {low: train.firstClassSeats < 10, none: train.firstClassSeats === 0}]">
+                            {{ train.firstClassSeats > 0 ? train.firstClassSeats + '张' : '无' }}
+                        </span>
+                    </div>
+                    <div class="seat-info">
+                        <span :class="['seat-count', {low: train.secondClassSeats < 20, none: train.secondClassSeats === 0}]">
+                            {{ train.secondClassSeats > 0 ? train.secondClassSeats + '张' : '无' }}
+                        </span>
+                    </div>
+                    <div class="price">¥{{ train.price }}</div>
+                    <div>
+                        <button class="book-btn" :class="{disabled: !hasAvailableSeats(train)}" @click.stop="openBooking(train)" :disabled="!hasAvailableSeats(train)">
+                            {{ hasAvailableSeats(train) ? '预订' : '无票' }}
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 加载中（骨架屏） -->
+            <div class="skeleton-list" v-if="isLoading">
+                <div class="skeleton-item" v-for="i in 5" :key="i">
+                    <div class="skeleton-block"></div>
+                    <div class="skeleton-block"></div>
+                    <div class="skeleton-block"></div>
+                    <div class="skeleton-block"></div>
+                    <div class="skeleton-block"></div>
+                    <div class="skeleton-block"></div>
+                </div>
+            </div>
+
+            <!-- 无结果 -->
+            <div class="no-results" v-if="!isLoading && hasSearched && trains.length === 0">
+                <i class="fas fa-exclamation-circle"></i>
+                <p>未找到符合条件的车次</p>
+                <p style="font-size: 14px; margin-top: 10px;">请尝试修改查询条件</p>
+            </div>
+        </div>
+
+        <!-- 预订弹窗 -->
+        <transition name="fade">
+        <div class="modal-overlay" v-if="showBookingModal" @click.self="closeBooking">
+            <div class="modal">
+                <div class="modal-header">
+                    <div class="modal-title">预订车票</div>
+                    <button class="modal-close" @click="closeBooking">×</button>
+                </div>
+                <div class="modal-body">
+                    <!-- 车次信息 -->
+                    <div class="order-info">
+                        <div class="order-info-row">
+                            <span>车次:</span>
+                            <span style="font-weight: bold; color: #2b5caa;">{{ selectedTrain.trainNo }}</span>
+                        </div>
+                        <div class="order-info-row">
+                            <span>行程:</span>
+                            <span>{{ selectedTrain.fromStation }} → {{ selectedTrain.toStation }}</span>
+                        </div>
+                        <div class="order-info-row">
+                            <span>时间:</span>
+                            <span>{{ selectedTrain.departureTime }} - {{ selectedTrain.arrivalTime }}</span>
+                        </div>
+                    </div>
+
+                    <!-- 座位选择 -->
+                    <div class="seat-selection">
+                        <div class="seat-type-label">选择座位类型:</div>
+                        <div class="seat-options">
+                            <div class="seat-option" :class="{selected: bookingForm.seatType === 'business'}" @click="selectSeatType('business')" v-if="selectedTrain.businessSeats > 0">
+                                <div class="seat-name">商务座</div>
+                                <div class="seat-price">¥{{ selectedTrain.businessPrice }}</div>
+                                <div style="font-size: 12px; color: #999; margin-top: 5px;">余票: {{ selectedTrain.businessSeats }}张</div>
+                            </div>
+                            <div class="seat-option" :class="{selected: bookingForm.seatType === 'first'}" @click="selectSeatType('first')" v-if="selectedTrain.firstClassSeats > 0">
+                                <div class="seat-name">一等座</div>
+                                <div class="seat-price">¥{{ selectedTrain.firstClassPrice }}</div>
+                                <div style="font-size: 12px; color: #999; margin-top: 5px;">余票: {{ selectedTrain.firstClassSeats }}张</div>
+                            </div>
+                            <div class="seat-option" :class="{selected: bookingForm.seatType === 'second'}" @click="selectSeatType('second')" v-if="selectedTrain.secondClassSeats > 0">
+                                <div class="seat-name">二等座</div>
+                                <div class="seat-price">¥{{ selectedTrain.secondClassPrice }}</div>
+                                <div style="font-size: 12px; color: #999; margin-top: 5px;">余票: {{ selectedTrain.secondClassSeats }}张</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 乘客信息 -->
+                    <div class="order-form">
+                        <div class="seat-type-label">乘客信息:</div>
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label>姓名</label>
+                                <input type="text" v-model="bookingForm.name" placeholder="请输入真实姓名">
+                            </div>
+                            <div class="form-group">
+                                <label>证件类型</label>
+                                <select v-model="bookingForm.idType">
+                                    <option value="id">身份证</option>
+                                    <option value="passport">护照</option>
+                                    <option value="other">其他</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label>证件号码</label>
+                                <input type="text" v-model="bookingForm.idNumber" placeholder="请输入证件号码">
+                            </div>
+                            <div class="form-group">
+                                <label>手机号</label>
+                                <input type="tel" v-model="bookingForm.phone" placeholder="请输入手机号码">
+                            </div>
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label>购票数量</label>
+                                <select v-model="bookingForm.quantity">
+                                    <option value="1">1张</option>
+                                    <option value="2">2张</option>
+                                    <option value="3">3张</option>
+                                    <option value="4">4张</option>
+                                    <option value="5">5张</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn-default" @click="closeBooking">取消</button>
+                    <button class="btn-primary" @click="confirmBooking">确认预订</button>
+                </div>
+            </div>
+        </div>
+        </transition>
+
+        <!-- 订单确认弹窗 -->
+        <transition name="fade">
+        <div class="modal-overlay" v-if="showConfirmModal" @click.self="closeConfirm">
+            <div class="modal">
+                <div class="modal-header">
+                    <div class="modal-title">订单确认</div>
+                    <button class="modal-close" @click="closeConfirm">×</button>
+                </div>
+                <div class="modal-body">
+                    <div class="success-page" style="padding: 20px 0;">
+                        <div style="text-align: left;">
+                            <h3 style="margin-bottom: 20px; color: #333;">订单详情</h3>
+                            <div class="order-details" style="margin: 0;">
+                                <div class="order-detail-row">
+                                    <span class="order-detail-label">订单编号:</span>
+                                    <span class="order-detail-value">{{ orderInfo.orderNo }}</span>
+                                </div>
+                                <div class="order-detail-row">
+                                    <span class="order-detail-label">车次:</span>
+                                    <span class="order-detail-value">{{ orderInfo.trainNo }}</span>
+                                </div>
+                                <div class="order-detail-row">
+                                    <span class="order-detail-label">行程:</span>
+                                    <span class="order-detail-value">{{ orderInfo.from }} → {{ orderInfo.to }}</span>
+                                </div>
+                                <div class="order-detail-row">
+                                    <span class="order-detail-label">出发时间:</span>
+                                    <span class="order-detail-value">{{ orderInfo.departureTime }}</span>
+                                </div>
+                                <div class="order-detail-row">
+                                    <span class="order-detail-label">座位类型:</span>
+                                    <span class="order-detail-value">{{ orderInfo.seatTypeName }}</span>
+                                </div>
+                                <div class="order-detail-row">
+                                    <span class="order-detail-label">乘客:</span>
+                                    <span class="order-detail-value">{{ orderInfo.passengerName }}</span>
+                                </div>
+                                <div class="order-detail-row">
+                                    <span class="order-detail-label">数量:</span>
+                                    <span class="order-detail-value">{{ orderInfo.quantity }}张</span>
+                                </div>
+                                <div class="order-detail-row" style="border-bottom: none; padding-top: 15px;">
+                                    <span class="order-detail-label" style="font-size: 16px;">总计:</span>
+                                    <span class="order-detail-value" style="color: #ff4d4f; font-size: 24px;">¥{{ orderInfo.totalPrice }}</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn-default" @click="closeConfirm">关闭</button>
+                    <button class="btn-primary" @click="payOrder">
+                        <i class="fas fa-credit-card"></i> 立即支付
+                    </button>
+                </div>
+            </div>
+        </div>
+        </transition>
+
+        <!-- 支付成功弹窗 -->
+        <transition name="fade">
+        <div class="modal-overlay" v-if="showSuccessModal" @click.self="closeSuccess">
+            <div class="modal" style="max-width: 500px;">
+                <div class="modal-body">
+                    <div class="success-page">
+                        <div class="success-icon">
+                            <i class="fas fa-check"></i>
+                        </div>
+                        <div class="success-title">支付成功！</div>
+                        <div class="success-message">您的车票已预订成功，请准时乘车</div>
+                        <div class="order-details">
+                            <div class="order-detail-row">
+                                <span class="order-detail-label">订单编号:</span>
+                                <span class="order-detail-value">{{ orderInfo.orderNo }}</span>
+                            </div>
+                            <div class="order-detail-row">
+                                <span class="order-detail-label">车次:</span>
+                                <span class="order-detail-value">{{ orderInfo.trainNo }}</span>
+                            </div>
+                            <div class="order-detail-row">
+                                <span class="order-detail-label">行程:</span>
+                                <span class="order-detail-value">{{ orderInfo.from }} → {{ orderInfo.to }}</span>
+                            </div>
+                            <div class="order-detail-row">
+                                <span class="order-detail-label">出发日期:</span>
+                                <span class="order-detail-value">{{ orderInfo.departureTime }}</span>
+                            </div>
+                            <div class="order-detail-row">
+                                <span class="order-detail-label">座位:</span>
+                                <span class="order-detail-value">{{ orderInfo.seatTypeName }} × {{ orderInfo.quantity }}张</span>
+                            </div>
+                        </div>
+                        <button class="btn-primary" @click="closeSuccess" style="width: 200px;">
+                            完成
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+        </transition>
+
+        <!-- 订单历史弹窗 -->
+        <transition name="fade">
+        <div class="modal-overlay" v-if="showOrderModal" @click.self="closeOrders">
+            <div class="modal">
+                <div class="modal-header">
+                    <div class="modal-title">我的订单</div>
+                    <button class="modal-close" @click="closeOrders">×</button>
+                </div>
+                <div class="modal-body">
+                    <div class="order-history-list" v-if="orders.length > 0">
+                        <div class="order-history-item" v-for="order in orders" :key="order.orderNo">
+                            <div class="order-history-head">
+                                <span style="color: #2b5caa;">{{ order.trainNo }}</span>
+                                <span class="order-status">{{ order.status || '已支付' }}</span>
+                            </div>
+                            <div class="order-history-row">
+                                <span>{{ order.from }} → {{ order.to }}</span>
+                                <span>{{ order.departureTime }}</span>
+                            </div>
+                            <div class="order-history-row">
+                                <span>{{ order.seatTypeName }} × {{ order.quantity }}张</span>
+                                <span style="color: #ff4d4f; font-weight: bold;">¥{{ order.totalPrice }}</span>
+                            </div>
+                            <div class="order-history-row">
+                                <span style="color: #999;">订单号: {{ order.orderNo }}</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="order-empty" v-else>
+                        <i class="fas fa-ticket-alt" style="font-size: 48px; margin-bottom: 15px; color: #ddd;"></i>
+                        <p>暂无订单记录</p>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn-default" @click="clearOrders" v-if="orders.length > 0">清空订单</button>
+                    <button class="btn-primary" @click="closeOrders">关闭</button>
+                </div>
+            </div>
+        </div>
+        </transition>
+
+        <!-- 通知（队列） -->
+        <div class="notification-wrap">
+            <div class="notification" v-for="n in notifications" :key="n.id" :class="{error: n.error}">
+                <i :class="n.error ? 'fas fa-exclamation-circle' : 'fas fa-check-circle'"></i>
+                <span>{{ n.message }}</span>
+            </div>
+        </div>
+
+        <!-- 页脚 -->
+        <footer>
+            <div class="container">
+                <div class="footer-content">
+                    <div class="footer-section">
+                        <h3>关于我们</h3>
+                        <ul>
+                            <li>中心简介</li>
+                            <li>联系我们</li>
+                            <li>服务协议</li>
+                            <li>隐私政策</li>
+                        </ul>
+                    </div>
+                    <div class="footer-section">
+                        <h3>客户服务</h3>
+                        <ul>
+                            <li>常见问题</li>
+                            <li>投诉建议</li>
+                            <li>退改签规则</li>
+                            <li>支付方式</li>
+                        </ul>
+                    </div>
+                    <div class="footer-section">
+                        <h3>合作伙伴</h3>
+                        <ul>
+                            <li>中国铁路总公司</li>
+                            <li>各铁路局</li>
+                            <li>保险公司</li>
+                            <li>支付平台</li>
+                        </ul>
+                    </div>
+                    <div class="footer-section">
+                        <h3>关注我们</h3>
+                        <ul>
+                            <li><i class="fab fa-weixin"></i> 官方微信</li>
+                            <li><i class="fab fa-weibo"></i> 官方微博</li>
+                            <li><i class="fas fa-mobile-alt"></i> 手机客户端</li>
+                            <li><i class="fas fa-envelope"></i> 邮件订阅</li>
+                        </ul>
+                    </div>
+                </div>
+                <div class="footer-bottom">
+                    <p>中国铁路客户服务中心 版权所有 © 2024</p>
+                    <p style="margin-top: 5px;">本网站仅为演示用途，非真实购票系统</p>
+                </div>
+            </div>
+        </footer>
+    </div>
+
+    <script>
+        new Vue({
+            el: '#app',
+            data: {
+                // 搜索类型
+                searchType: 'single',
+
+                // 排序方式
+                sortBy: 'departure',
+                
+                // 搜索表单
+                searchForm: {
+                    from: '北京',
+                    to: '上海',
+                    date: '',
+                    returnDate: '',
+                    trainType: 'all'
+                },
+
+                // 城市列表
+                cities: ['北京', '上海', '广州', '深圳', '杭州', '南京', '成都', '重庆', '武汉', '西安', '郑州', '长沙', '天津', '青岛', '大连', '厦门', '昆明', '贵阳', '兰州', '乌鲁木齐'],
+
+                // 时间筛选
+                timeFilter: 'all',
+
+                // 车次数据
+                trains: [],
+                isLoading: false,
+                hasSearched: false,
+
+                // 预订相关
+                showBookingModal: false,
+                selectedTrain: null,
+                bookingForm: {
+                    seatType: 'second',
+                    name: '',
+                    idType: 'id',
+                    idNumber: '',
+                    phone: '',
+                    quantity: 1
+                },
+
+                // 订单确认
+                showConfirmModal: false,
+                orderInfo: {},
+
+                // 支付成功
+                showSuccessModal: false,
+
+                // 通知（队列）
+                notifications: [],
+
+                // 订单历史
+                orders: [],
+                showOrderModal: false
+            },
+            computed: {
+                today() {
+                    const today = new Date();
+                    return today.toISOString().split('T')[0];
+                },
+                filteredTrains() {
+                    let result = this.trains;
+
+                    // 时间筛选
+                    if (this.timeFilter !== 'all') {
+                        result = result.filter(train => {
+                            const hour = parseInt(train.departureTime.split(':')[0]);
+                            if (this.timeFilter === 'morning') return hour >= 6 && hour < 12;
+                            if (this.timeFilter === 'afternoon') return hour >= 12 && hour < 18;
+                            if (this.timeFilter === 'evening') return hour >= 18 && hour < 24;
+                            return true;
+                        });
+                    }
+
+                    // 排序（浅拷贝，避免修改原数组）
+                    result = [...result];
+                    if (this.sortBy === 'price') {
+                        result.sort((a, b) => a.price - b.price);
+                    } else if (this.sortBy === 'duration') {
+                        result.sort((a, b) => a.durationMinutes - b.durationMinutes);
+                    } else {
+                        result.sort((a, b) => a.departureTime.localeCompare(b.departureTime));
+                    }
+
+                    return result;
+                }
+            },
+            methods: {
+                // 交换城市
+                swapCities() {
+                    const temp = this.searchForm.from;
+                    this.searchForm.from = this.searchForm.to;
+                    this.searchForm.to = temp;
+                },
+
+                // 查询车次
+                searchTrains() {
+                    if (!this.searchForm.from || !this.searchForm.to || !this.searchForm.date) {
+                        this.showNotification('请填写完整的查询信息', true);
+                        return;
+                    }
+                    if (this.searchType === 'round' && !this.searchForm.returnDate) {
+                        this.showNotification('请填写返程日期', true);
+                        return;
+                    }
+                    if (this.searchForm.from === this.searchForm.to) {
+                        this.showNotification('出发地和目的地不能相同', true);
+                        return;
+                    }
+
+                    this.isLoading = true;
+                    this.hasSearched = true;
+                    this.trains = [];
+                    // 重置筛选与排序
+                    this.timeFilter = 'all';
+                    this.sortBy = 'departure';
+
+                    // 模拟API请求
+                    setTimeout(() => {
+                        this.trains = this.generateTrains();
+                        this.isLoading = false;
+
+                        if (this.trains.length > 0) {
+                            const roundInfo = this.searchType === 'round' ? '（含返程）' : '';
+                            this.showNotification(`查询完成，共找到 ${this.trains.length} 个车次${roundInfo}`);
+                        }
+                    }, 1000);
+                },
+
+                // 生成模拟车次数据
+                generateTrains() {
+                    const trainTypes = [
+                        { prefix: 'G', name: '高铁', basePrice: 500, speed: '300km/h' },
+                        { prefix: 'D', name: '动车', basePrice: 350, speed: '250km/h' },
+                        { prefix: 'Z', name: '直达', basePrice: 250, speed: '160km/h' },
+                        { prefix: 'T', name: '特快', basePrice: 200, speed: '140km/h' },
+                        { prefix: 'K', name: '快速', basePrice: 150, speed: '120km/h' }
+                    ];
+
+                    const trains = [];
+                    const trainCount = 8 + Math.floor(Math.random() * 5);
+                    // 往返时生成「去程 + 返程」两批车次
+                    const directions = this.searchType === 'round' ? ['去程', '返程'] : ['去程'];
+
+                    for (let d = 0; d < directions.length; d++) {
+                        for (let i = 0; i < trainCount; i++) {
+                            const type = trainTypes[Math.floor(Math.random() * trainTypes.length)];
+                            const trainNo = `${type.prefix}${1000 + Math.floor(Math.random() * 9000)}`;
+
+                            const departureHour = 6 + Math.floor(Math.random() * 16);
+                            const departureMinute = Math.floor(Math.random() * 60);
+                            const durationHours = 2 + Math.floor(Math.random() * 10);
+                            const durationMinutes = Math.floor(Math.random() * 60);
+
+                            const arrivalHour = (departureHour + durationHours) % 24;
+                            const arrivalMinute = (departureMinute + durationMinutes) % 60;
+
+                            const priceVariation = 0.8 + Math.random() * 0.4;
+                            const basePrice = Math.round(type.basePrice * priceVariation);
+
+                            const businessSeats = type.prefix === 'G' || type.prefix === 'D' ? Math.floor(Math.random() * 30) : 0;
+                            const firstClassSeats = type.prefix === 'G' || type.prefix === 'D' || type.prefix === 'Z' ? Math.floor(Math.random() * 80) : 0;
+                            const secondClassSeats = 50 + Math.floor(Math.random() * 200);
+
+                            const isReturn = directions[d] === '返程';
+                            trains.push({
+                                id: trains.length,
+                                trainNo: trainNo,
+                                typeName: type.name,
+                                direction: directions[d],
+                                date: isReturn ? this.searchForm.returnDate : this.searchForm.date,
+                                fromStation: isReturn ? this.searchForm.to : this.searchForm.from,
+                                toStation: isReturn ? this.searchForm.from : this.searchForm.to,
+                                departureTime: `${String(departureHour).padStart(2, '0')}:${String(departureMinute).padStart(2, '0')}`,
+                                arrivalTime: `${String(arrivalHour).padStart(2, '0')}:${String(arrivalMinute).padStart(2, '0')}`,
+                                duration: `${durationHours}时${durationMinutes}分`,
+                                durationMinutes: durationHours * 60 + durationMinutes,
+                                price: basePrice,
+                                businessPrice: Math.round(basePrice * 2.5),
+                                firstClassPrice: Math.round(basePrice * 1.6),
+                                secondClassPrice: basePrice,
+                                businessSeats: businessSeats,
+                                firstClassSeats: firstClassSeats,
+                                secondClassSeats: secondClassSeats
+                            });
+                        }
+                    }
+
+                    // 按出发时间排序
+                    return trains.sort((a, b) => a.departureTime.localeCompare(b.departureTime));
+                },
+
+                // 判断是否有可用座位
+                hasAvailableSeats(train) {
+                    return train.businessSeats > 0 || train.firstClassSeats > 0 || train.secondClassSeats > 0;
+                },
+
+                // 打开预订弹窗
+                openBooking(train) {
+                    this.selectedTrain = train;
+                    this.showBookingModal = true;
+                    
+                    // 自动选择第一个有票的座位类型
+                    if (train.secondClassSeats > 0) {
+                        this.bookingForm.seatType = 'second';
+                    } else if (train.firstClassSeats > 0) {
+                        this.bookingForm.seatType = 'first';
+                    } else if (train.businessSeats > 0) {
+                        this.bookingForm.seatType = 'business';
+                    }
+                },
+
+                // 关闭预订弹窗
+                closeBooking() {
+                    this.showBookingModal = false;
+                    this.selectedTrain = null;
+                    this.bookingForm = {
+                        seatType: 'second',
+                        name: '',
+                        idType: 'id',
+                        idNumber: '',
+                        phone: '',
+                        quantity: 1
+                    };
+                },
+
+                // 选择座位类型
+                selectSeatType(type) {
+                    this.bookingForm.seatType = type;
+                },
+
+                // 确认预订
+                confirmBooking() {
+                    // 验证表单
+                    if (!this.bookingForm.name.trim()) {
+                        this.showNotification('请输入乘客姓名', true);
+                        return;
+                    }
+                    if (!this.bookingForm.idNumber) {
+                        this.showNotification('请输入证件号码', true);
+                        return;
+                    }
+                    if (this.bookingForm.idType === 'id' && !/^\d{17}[\dXx]$/.test(this.bookingForm.idNumber)) {
+                        this.showNotification('请输入18位有效身份证号码', true);
+                        return;
+                    }
+                    if (this.bookingForm.idType === 'passport' && !/^[A-Za-z0-9]{5,17}$/.test(this.bookingForm.idNumber)) {
+                        this.showNotification('请输入有效的护照号码', true);
+                        return;
+                    }
+                    if (!/^1[3-9]\d{9}$/.test(this.bookingForm.phone)) {
+                        this.showNotification('请输入11位有效手机号码', true);
+                        return;
+                    }
+
+                    // 生成订单
+                    const seatPrices = {
+                        business: this.selectedTrain.businessPrice,
+                        first: this.selectedTrain.firstClassPrice,
+                        second: this.selectedTrain.secondClassPrice
+                    };
+
+                    const seatNames = {
+                        business: '商务座',
+                        first: '一等座',
+                        second: '二等座'
+                    };
+
+                    this.orderInfo = {
+                        orderNo: 'E' + Date.now(),
+                        trainId: this.selectedTrain.id,
+                        trainNo: this.selectedTrain.trainNo,
+                        from: this.selectedTrain.fromStation,
+                        to: this.selectedTrain.toStation,
+                        departureTime: `${this.selectedTrain.date} ${this.selectedTrain.departureTime}`,
+                        seatType: this.bookingForm.seatType,
+                        seatTypeName: seatNames[this.bookingForm.seatType],
+                        passengerName: this.bookingForm.name,
+                        quantity: parseInt(this.bookingForm.quantity),
+                        totalPrice: seatPrices[this.bookingForm.seatType] * parseInt(this.bookingForm.quantity)
+                    };
+
+                    this.closeBooking();
+                    this.showConfirmModal = true;
+                },
+
+                // 关闭确认弹窗
+                closeConfirm() {
+                    this.showConfirmModal = false;
+                },
+
+                // 支付订单
+                payOrder() {
+                    // 扣减余票
+                    const seatKeyMap = { business: 'businessSeats', first: 'firstClassSeats', second: 'secondClassSeats' };
+                    const seatKey = seatKeyMap[this.orderInfo.seatType];
+                    const train = this.trains.find(t => t.id === this.orderInfo.trainId);
+                    if (train && seatKey) {
+                        train[seatKey] = Math.max(0, train[seatKey] - this.orderInfo.quantity);
+                    }
+
+                    // 保存订单到本地
+                    this.orders.unshift({ ...this.orderInfo, status: '已支付', payTime: new Date().toLocaleString() });
+                    localStorage.setItem('trainOrders', JSON.stringify(this.orders));
+
+                    this.closeConfirm();
+                    this.showSuccessModal = true;
+                    this.showNotification('支付成功！');
+                },
+
+                // 关闭成功弹窗
+                closeSuccess() {
+                    this.showSuccessModal = false;
+                },
+
+                // 显示订单历史
+                showOrders() {
+                    this.showOrderModal = true;
+                },
+
+                // 关闭订单历史
+                closeOrders() {
+                    this.showOrderModal = false;
+                },
+
+                // 清空订单
+                clearOrders() {
+                    this.orders = [];
+                    localStorage.removeItem('trainOrders');
+                    this.showNotification('订单记录已清空');
+                },
+
+                // 显示通知（队列）
+                showNotification(message, isError = false) {
+                    // 成功通知时清除残留的错误通知
+                    if (!isError) {
+                        this.notifications = this.notifications.filter(n => n.error);
+                    }
+
+                    const id = 'n' + Date.now() + Math.random().toString(36).slice(2, 6);
+                    this.notifications.push({ id, message, error: isError });
+
+                    setTimeout(() => {
+                        this.notifications = this.notifications.filter(n => n.id !== id);
+                    }, 3000);
+                },
+
+                // 键盘快捷键：ESC 关闭所有弹窗
+                handleKeydown(e) {
+                    if (e.key === 'Escape') {
+                        this.closeAllModals();
+                    }
+                },
+
+                // 关闭所有弹窗
+                closeAllModals() {
+                    this.showBookingModal = false;
+                    this.showConfirmModal = false;
+                    this.showSuccessModal = false;
+                    this.showOrderModal = false;
+                }
+            },
+            mounted() {
+                // 设置默认日期为明天
+                const tomorrow = new Date();
+                tomorrow.setDate(tomorrow.getDate() + 1);
+                this.searchForm.date = tomorrow.toISOString().split('T')[0];
+
+                // 加载订单历史
+                try {
+                    const saved = localStorage.getItem('trainOrders');
+                    if (saved) {
+                        this.orders = JSON.parse(saved);
+                    }
+                } catch (e) {
+                    // 本地数据损坏时忽略
+                }
+
+                // ESC 关闭弹窗
+                window.addEventListener('keydown', this.handleKeydown);
+            },
+            beforeDestroy() {
+                window.removeEventListener('keydown', this.handleKeydown);
+            }
+        });
+    </script>
+</body>
+</html>

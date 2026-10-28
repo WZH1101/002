@@ -1,0 +1,29 @@
+# ---- IDE / 编辑器 ----
+.idea/
+.vscode/
+.qoder/
+
+# ---- 本地工具与依赖（体积大、可重新下载，不入库）----
+.tools/
+node_modules/
+ctrip-backend/tools/
+ctrip-backend/node_modules/
+
+# ---- 构建产物 ----
+target/
+ctrip-backend/target/
+*.class
+*.jar
+!gradle/wrapper/gradle-wrapper.jar
+
+# ---- 日志与临时文件 ----
+*.log
+*.tmp
+~$*
+Thumbs.db
+Desktop.ini
+
+# ---- 本地敏感配置：数据库密码只走环境变量 ----
+.env
+*.env
+application-local.yml
