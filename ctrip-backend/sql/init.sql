@@ -336,6 +336,37 @@ CREATE TABLE IF NOT EXISTS user_session (
   KEY idx_session_expire (expire_time)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
+-- 2026-10-28 新增：登录短信验证码。演示站没有短信网关，码由服务端随机生成；
+-- 表里只存 PBKDF2 哈希，明文码要么回显给页面（开发开关），要么只写日志。
+-- 一次性使用：used=1 之后即使还在有效期内也不能再登。
+CREATE TABLE IF NOT EXISTS sms_code (
+  id BIGINT AUTO_INCREMENT PRIMARY KEY,
+  phone VARCHAR(16) NOT NULL,
+  scene VARCHAR(16) NOT NULL DEFAULT 'login',   -- 预留：login / register / bind 等
+  code_hash VARCHAR(128) NOT NULL,              -- pbkdf2$迭代数$盐$哈希
+  attempts INT NOT NULL DEFAULT 0,              -- 已校验失败次数，超过上限直接作废
+  used TINYINT NOT NULL DEFAULT 0,
+  create_time DATETIME DEFAULT CURRENT_TIMESTAMP,
+  expire_time DATETIME NOT NULL,
+  KEY idx_sms_phone (phone, scene, used, expire_time),
+  KEY idx_sms_expire (expire_time)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- 2026-10-28 新增：扫码登录场景。手机确认页与电脑轮询读写同一行，
+-- 因此不能用内存 Map（重启会丢正在扫码的场景）。
+-- 这里不存任何令牌：会话是电脑来领取的那一刻才由 user_session 现签的（见 QrLoginService.poll），
+-- 数据库里不留「躺着等人来取」的凭据；领取成功后整行删除。
+CREATE TABLE IF NOT EXISTS login_qrcode (
+  scene CHAR(32) PRIMARY KEY,
+  status VARCHAR(16) NOT NULL DEFAULT 'PENDING',  -- PENDING/SCANNED/CONFIRMED/REJECTED/EXPIRED/CLAIMED
+  user_id BIGINT NULL,                            -- 扫码并确认的账号
+  create_time DATETIME DEFAULT CURRENT_TIMESTAMP,
+  scan_time DATETIME NULL,
+  confirm_time DATETIME NULL,
+  expire_time DATETIME NOT NULL,
+  KEY idx_qr_expire (expire_time)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
 -- 2026-10-25 新增：拓展模块表（旅游/用车/礼品卡/全球购/企业商旅），种子数据见 tools/seed-modules.js
 CREATE TABLE IF NOT EXISTS vacation_product (id BIGINT AUTO_INCREMENT PRIMARY KEY, city VARCHAR(30) NOT NULL, name VARCHAR(120) NOT NULL, days INT NOT NULL, style VARCHAR(30), score VARCHAR(10), tags JSON, price INT NOT NULL, packages JSON) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 CREATE TABLE IF NOT EXISTS car_product (id BIGINT AUTO_INCREMENT PRIMARY KEY, city VARCHAR(30) NOT NULL, brand VARCHAR(60) NOT NULL, level VARCHAR(30), price INT NOT NULL, deposit INT NOT NULL, stock INT NOT NULL, feature VARCHAR(120)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;

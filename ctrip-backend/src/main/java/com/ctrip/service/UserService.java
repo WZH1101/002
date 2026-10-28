@@ -1,14 +1,10 @@
 package com.ctrip.service;
 
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 
-import javax.crypto.SecretKeyFactory;
-import javax.crypto.spec.PBEKeySpec;
-import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
-import java.security.SecureRandom;
 import java.sql.Timestamp;
 import java.time.Duration;
 import java.time.Instant;
@@ -32,16 +28,16 @@ import java.util.concurrent.ConcurrentHashMap;
  * <p>登录限速：按「用户名 + 客户端 IP」计数，连续失败 5 次锁 15 分钟；注册按 IP 限频。
  * 没有这层，任何人都能拿字典对着 /api/auth/login 无限撞库。
  * 计数器是单机的（内存 Map），多实例部署应换成 Redis；对本项目够用，且不做成跨实例一致是有意取舍。
+ *
+ * <p>三种登录方式共用同一套会话签发（{@link #sessionFor}）：账号密码（本类）、
+ * 手机验证码（{@link SmsCodeService} 验码后由 {@link #loginBySms} 落账号）、
+ * 扫码（手机确认页登录后由 {@link QrLoginService} 调 {@link #issueSession}）。
+ * 三条路签出来的令牌完全同构，所以订单等后续接口的鉴权口径不需要区分登录方式。
  */
 @Service
 public class UserService {
 
     private static final long TOKEN_TTL_SECONDS = 2 * 60 * 60;
-
-    private static final String KDF_PREFIX = "pbkdf2";
-    private static final int KDF_ITERATIONS = 120_000;
-    private static final int KDF_KEY_BITS = 256;
-    private static final SecureRandom RANDOM = new SecureRandom();
 
     /**
      * 连续失败多少次后锁定 / 锁定时长（分钟）/ 同一 IP 每小时可注册的账号数。
@@ -61,12 +57,15 @@ public class UserService {
     private final int maxRegistersPerHour;
 
     private final JdbcTemplate jdbc;
+    private final SmsCodeService sms;
 
     public UserService(JdbcTemplate jdbc,
+                       SmsCodeService sms,
                        @Value("${ctrip.auth.max-login-failures:5}") int maxLoginFailures,
                        @Value("${ctrip.auth.lock-minutes:15}") long lockMinutes,
                        @Value("${ctrip.auth.max-register-per-hour:5}") int maxRegistersPerHour) {
         this.jdbc = jdbc;
+        this.sms = sms;
         this.maxLoginFailures = Math.max(1, maxLoginFailures);
         this.loginLockMinutes = Math.max(1, lockMinutes);
         this.maxRegistersPerHour = Math.max(1, maxRegistersPerHour);
@@ -87,7 +86,26 @@ public class UserService {
                     + " JOIN app_user u ON u.id = s.user_id"
                     + " WHERE s.token = ? AND s.expire_time > NOW() AND s.auth_ver = u.auth_ver";
 
-    private record Attempt(int failures, Instant lockedUntil) {}
+    /** 验证码登录：按号码取账号（列必须与 sessionFor 用到的字段一致） */
+    private static final String USER_BY_PHONE =
+            "SELECT id, username, nickname, phone, auth_ver FROM app_user WHERE phone = ? ORDER BY id";
+
+    /** 扫码登录：确认页已经验过身份，这里按 id 取回账号签发会话 */
+    private static final String USER_FOR_SESSION =
+            "SELECT id, username, nickname, phone, auth_ver FROM app_user WHERE id = ?";
+
+    /**
+     * 一次「用户名@IP」的失败记录。
+     *
+     * <p>带 lastFailure 有两个用处：一是「连续失败」本来就该有时间含义——一周里零散输错 5 次
+     * 不该触发锁定；二是给内存计数器一个合法的淘汰依据，公网长跑不会只增不减。
+     */
+    private record Attempt(int failures, Instant lockedUntil, Instant lastFailure) {}
+
+    /** 失败计数器的存活时间：超过一小时没再失败过，之前的计数作废（锁定期本身仍按 lock-minutes 走） */
+    private static final Duration ATTEMPT_TTL = Duration.ofHours(1);
+    /** 内存计数器的条数上限，超过就淘汰过期条目（见 throttleRegister / recordFailure） */
+    private static final int COUNTER_CAP = 10_000;
 
     /** 登录失败计数与锁定期（单机内存，见类注释的取舍说明） */
     private final Map<String, Attempt> loginAttempts = new ConcurrentHashMap<>();
@@ -113,18 +131,14 @@ public class UserService {
         if (phone != null && !phone.isEmpty() && !phone.matches("1[3-9]\\d{9}")) {
             throw new IllegalStateException("请输入11位有效手机号码");
         }
-        if (nickname == null || nickname.isEmpty()) {
-            nickname = username;
-        }
+        nickname = clampNickname(nickname, username);
 
         Long exists = jdbc.queryForObject("SELECT COUNT(*) FROM app_user WHERE username = ?", Long.class, username);
         if (exists != null && exists > 0) {
             throw new IllegalStateException("用户名已被注册");
         }
 
-        String salt = randomSaltHex();
-        jdbc.update("INSERT INTO app_user(username, pwd_hash, salt, nickname, phone) VALUES(?,?,?,?,?)",
-                username, encodePassword(password, salt), salt, nickname, phone);
+        insertUser(username, password, Crypto.randomSaltHex(), nickname, phone);
         Long id = jdbc.queryForObject("SELECT id FROM app_user WHERE username = ?", Long.class, username);
 
         Map<String, Object> user = new LinkedHashMap<>();
@@ -132,6 +146,64 @@ public class UserService {
         user.put("username", username);
         user.put("nickname", nickname);
         return user;
+    }
+
+    /**
+     * 手机验证码注册：手机号 + 注册码 + （可选）口令。
+     *
+     * <p>手机号是唯一凭据，注册码只保证「这个号码还没注册过」（见
+     * {@link SmsCodeService#sendRegisterCode} 的取舍），所以这里要求号码唯一；
+     * 用户名按 {@code m + 手机号} 自动生成，之后可以用验证码登录，也可用手机号当用户名试密码登录。
+     *
+     * <p>口令选填：填了必须符合强度规则；留空则生成一个用户不知道的随机口令——
+     * 账号只能靠验证码登录，这正是「手机号注册」的预期形态。留空生成随机口令比存「无口令」
+     * 标记安全：pwd_hash 永远是有效哈希，登录路径不存在「这条记录没有口令」的特殊分支。
+     *
+     * @return 与登录同构的会话信息（token/id/username/nickname/phone），注册成功即登录
+     */
+    public Map<String, Object> registerBySms(Map<String, Object> req, String clientIp) {
+        String phone = str(req.get("phone"));
+        String code = str(req.get("code"));
+        String nickname = str(req.get("nickname"));
+        String password = str(req.get("password"));
+
+        if (phone == null || !phone.matches("1[3-9]\\d{9}")) {
+            throw new IllegalStateException("请输入11位有效手机号码");
+        }
+        if (code == null || !code.matches("\\d{6}")) {
+            throw new IllegalStateException("请输入6位短信验证码");
+        }
+        if (password != null && !password.isEmpty() && !isStrongPassword(password)) {
+            throw new IllegalStateException(PWD_RULE);
+        }
+        // 限流放在验码之前：反过来的话，被限流的那一次已经把唯一的一张码消费掉了，
+        // 用户等一小时额度恢复之外还要重新发一条，纯亏。
+        throttleRegister(clientIp);
+        if (!sms.verifyRegisterCode(phone, code)) {
+            throw new IllegalStateException("验证码不正确或已失效");
+        }
+
+        Long exists = jdbc.queryForObject("SELECT COUNT(*) FROM app_user WHERE phone = ?", Long.class, phone);
+        if (exists != null && exists > 0) {
+            // 发码时说「未注册」，此刻又已存在：对方先一步注册了同一个号码，或注册码与号码对不上
+            throw new IllegalStateException("该手机号刚刚已被注册，请直接登录");
+        }
+        // 用户名自动生成：手机号是唯一凭据，m+手机号 也是唯一的；正则允许字母数字下划线
+        String username = "m" + phone;
+        Long nameTaken = jdbc.queryForObject("SELECT COUNT(*) FROM app_user WHERE username = ?", Long.class, username);
+        if (nameTaken != null && nameTaken > 0) {
+            // 理论上只有手工建过一个叫 m13xxxxxxxxx 的账号才会走到这里
+            username = username + "_" + Crypto.randomToken().substring(0, 4);
+        }
+        nickname = clampNickname(nickname, "手机用户" + phone.substring(7));
+        if (password == null || password.isEmpty()) {
+            // 随机口令：用户不知道它，只能验证码登录；保证同时含字母和数字（前缀 Yt + 十六进制）
+            password = "Yt" + Crypto.randomToken().substring(0, 16);
+        }
+
+        insertUser(username, password, Crypto.randomSaltHex(), nickname, phone);
+        return sessionFor(jdbc.queryForMap(
+                "SELECT id, username, nickname, phone, auth_ver FROM app_user WHERE username = ?", username));
     }
 
     public Map<String, Object> login(Map<String, Object> req, String clientIp) {
@@ -160,11 +232,57 @@ public class UserService {
         String stored = (String) row.get("pwd_hash");
         String salt = (String) row.get("salt");
         // 旧版 SHA-256 记录在此透明升级为 PBKDF2，历史账号无需强制改密
-        if (!stored.startsWith(KDF_PREFIX + "$")) {
+        if (!Crypto.isKdfStored(stored)) {
             jdbc.update("UPDATE app_user SET pwd_hash = ? WHERE id = ?", encodePassword(password, salt), row.get("id"));
         }
+        return sessionFor(row);
+    }
 
-        String token = randomToken();
+    /**
+     * 手机验证码登录。验证码本身由 {@link SmsCodeService} 校验（有效期、重发间隔、
+     * 每小时上限、尝试次数、一次性），这里只负责「号码 → 账号 → 签发会话」。
+     *
+     * <p>不再叠一层登录失败锁定：6 位码的尝试次数已经被 sms-max-attempts 钉死并在达到上限时
+     * 作废，重发另有每小时配额；同一件事做两套计数器反而会出现「哪个先到上限」说不清的情况。
+     */
+    public Map<String, Object> loginBySms(String phone, String code) {
+        if (phone == null || !phone.matches("1[3-9]\\d{9}")) {
+            throw new IllegalStateException("请输入11位有效手机号码");
+        }
+        if (code == null || !code.matches("\\d{6}")) {
+            throw new IllegalStateException("请输入6位短信验证码");
+        }
+        if (!sms.verifyLoginCode(phone, code)) {
+            throw new IllegalStateException("验证码不正确或已失效");
+        }
+        // 一个号码可能挂着多个账号（演示数据里 13800138000 就有三个）。
+        // 验证码登录不能变成「用别人的号码挑一个账号登进去」，所以只接受唯一归属。
+        List<Map<String, Object>> rows = jdbc.queryForList(USER_BY_PHONE, phone);
+        if (rows.isEmpty()) {
+            throw new IllegalStateException("该手机号未注册，请先注册或用账号密码登录");
+        }
+        if (rows.size() > 1) {
+            throw new IllegalStateException("该手机号绑定了 " + rows.size()
+                    + " 个账号，无法用验证码登录，请改用账号密码登录");
+        }
+        return sessionFor(rows.get(0));
+    }
+
+    /**
+     * 扫码确认后为指定账号签发会话。手机点「确认登录」时已经把那个账号的令牌验过了，
+     * 电脑这边领取的是新签发的一条会话，不是把手机那条令牌搬过去。
+     */
+    public Map<String, Object> issueSession(long userId) {
+        List<Map<String, Object>> rows = jdbc.queryForList(USER_FOR_SESSION, userId);
+        if (rows.isEmpty()) {
+            throw new IllegalStateException("账号不存在或已被删除");
+        }
+        return sessionFor(rows.get(0));
+    }
+
+    /** 写一条 user_session 并组装登录返回体；token 与表里那条记录一一对应 */
+    private Map<String, Object> sessionFor(Map<String, Object> row) {
+        String token = Crypto.randomToken();
         jdbc.update("INSERT INTO user_session(token, user_id, auth_ver, expire_time) VALUES(?,?,?,?)",
                 token, row.get("id"), row.get("auth_ver"),
                 Timestamp.from(Instant.now().plusSeconds(TOKEN_TTL_SECONDS)));
@@ -249,12 +367,34 @@ public class UserService {
             throw new IllegalStateException("原密码不正确");
         }
 
-        String salt = randomSaltHex();
+        String salt = Crypto.randomSaltHex();
         jdbc.update("UPDATE app_user SET pwd_hash = ?, salt = ?, auth_ver = auth_ver + 1 WHERE id = ?",
                 encodePassword(newPassword, salt), salt, u.id());
         jdbc.update("DELETE FROM user_session WHERE user_id = ?", u.id());
         // 失败计数按用户名维度残留已无意义，一并清掉
         loginAttempts.keySet().removeIf(k -> k.startsWith(u.username() + "@"));
+    }
+
+    // ==================== 建号 ====================
+
+    /** 昵称列是 VARCHAR(50)：超长截断，而不是让 MySQL 报「Data too long」变成一句裸 500 */
+    private static String clampNickname(String nickname, String fallback) {
+        String n = (nickname == null || nickname.isEmpty()) ? fallback : nickname;
+        return n.length() > 50 ? n.substring(0, 50) : n;
+    }
+
+    /**
+     * 插入账号。上面的 COUNT 预检查只是为了给一句更清楚的提示，真正的唯一性由
+     * {@code app_user.username} 的 UNIQUE 索引兜底：两个请求同时注册同一个用户名（手机号注册
+     * 走 {@code m+手机号}，同理）时后到的那个会撞键——不转成业务异常就是一句 500。
+     */
+    private void insertUser(String username, String password, String salt, String nickname, String phone) {
+        try {
+            jdbc.update("INSERT INTO app_user(username, pwd_hash, salt, nickname, phone) VALUES(?,?,?,?,?)",
+                    username, encodePassword(password, salt), salt, nickname, phone);
+        } catch (DuplicateKeyException e) {
+            throw new IllegalStateException("该账号刚刚已被注册，请直接登录或换一个用户名");
+        }
     }
 
     // ==================== 限速 ====================
@@ -277,11 +417,17 @@ public class UserService {
      *         省掉「第 N 次只说密码错误、第 N+1 次才说锁定」这种让人以为还能再试的误导。
      */
     private boolean recordFailure(String key) {
+        Instant now = Instant.now();
+        if (loginAttempts.size() > COUNTER_CAP) {
+            loginAttempts.values().removeIf(a -> a.lastFailure().plus(ATTEMPT_TTL).isBefore(now));
+        }
         Attempt a = loginAttempts.compute(key, (k, old) -> {
-            int failures = (old == null ? 0 : old.failures()) + 1;
+            // 上一次失败已经是一小时前：重新开始数，否则「连续失败 5 次」会变成「累计失败 5 次」
+            int previous = old == null || old.lastFailure().plus(ATTEMPT_TTL).isBefore(now) ? 0 : old.failures();
+            int failures = previous + 1;
             Instant locked = failures >= maxLoginFailures
-                    ? Instant.now().plus(Duration.ofMinutes(loginLockMinutes)) : null;
-            return new Attempt(failures, locked);
+                    ? now.plus(Duration.ofMinutes(loginLockMinutes)) : null;
+            return new Attempt(failures, locked, now);
         });
         return a != null && a.lockedUntil() != null;
     }
@@ -289,6 +435,8 @@ public class UserService {
     private void throttleRegister(String clientIp) {
         String ip = clientIp == null ? "-" : clientIp;
         long nowHour = System.currentTimeMillis() / 3_600_000;
+        // 内存计数器只增不减迟早吃满堆：到阈值就把「不属于当前小时」的条目清掉
+        if (registerWindow.size() > COUNTER_CAP) registerWindow.values().removeIf(v -> v[1] != nowHour);
         long[] win = registerWindow.compute(ip, (k, v) -> {
             if (v == null || v[1] != nowHour) return new long[]{1, nowHour};
             v[0]++;
@@ -304,7 +452,7 @@ public class UserService {
         jdbc.update("DELETE FROM user_session WHERE expire_time < DATE_SUB(NOW(), INTERVAL 1 DAY)");
     }
 
-    // ==================== 口令散列 ====================
+    // ==================== 口令散列（统一走 Crypto） ====================
 
     private static boolean isStrongPassword(String password) {
         return password != null
@@ -315,74 +463,14 @@ public class UserService {
 
     /** 生成 pbkdf2$迭代数$盐$哈希 形式的存储值 */
     private static String encodePassword(String password, String salt) {
-        return KDF_PREFIX + "$" + KDF_ITERATIONS + "$" + salt + "$"
-                + toHex(pbkdf2(password, salt, KDF_ITERATIONS));
+        return Crypto.encode(password, salt);
     }
 
     /** 兼容校验：新格式走 PBKDF2，旧的单次 SHA-256 记录按原算法比对 */
     private static boolean passwordMatches(String raw, String stored, String salt) {
         if (raw == null || stored == null || salt == null) return false;
-        if (stored.startsWith(KDF_PREFIX + "$")) {
-            String[] parts = stored.split("\\$");
-            if (parts.length != 4) return false;
-            int iterations;
-            try {
-                iterations = Integer.parseInt(parts[1]);
-            } catch (NumberFormatException e) {
-                return false;
-            }
-            // 盐以存储值里的为准，避免被列值不一致时误判
-            return constantTimeEquals(toHex(pbkdf2(raw, parts[2], iterations)), parts[3]);
-        }
-        return constantTimeEquals(legacySha256Hex(raw, salt), stored);
-    }
-
-    private static byte[] pbkdf2(String password, String salt, int iterations) {
-        try {
-            PBEKeySpec spec = new PBEKeySpec(
-                    password.toCharArray(), salt.getBytes(StandardCharsets.UTF_8), iterations, KDF_KEY_BITS);
-            return SecretKeyFactory.getInstance("PBKDF2WithHmacSHA256").generateSecret(spec).getEncoded();
-        } catch (Exception e) {
-            throw new IllegalStateException("口令加密失败");
-        }
-    }
-
-    /** 历史算法，仅用于旧记录校验 */
-    private static String legacySha256Hex(String password, String salt) {
-        try {
-            MessageDigest md = MessageDigest.getInstance("SHA-256");
-            return toHex(md.digest((password + salt).getBytes(StandardCharsets.UTF_8)));
-        } catch (Exception e) {
-            throw new IllegalStateException("口令加密失败");
-        }
-    }
-
-    private static String randomSaltHex() {
-        byte[] bytes = new byte[8];
-        RANDOM.nextBytes(bytes);
-        return toHex(bytes);
-    }
-
-    /** 32 位十六进制令牌，来自 SecureRandom */
-    private static String randomToken() {
-        byte[] bytes = new byte[16];
-        RANDOM.nextBytes(bytes);
-        return toHex(bytes);
-    }
-
-    private static String toHex(byte[] bytes) {
-        StringBuilder sb = new StringBuilder(bytes.length * 2);
-        for (byte b : bytes) sb.append(String.format("%02x", b));
-        return sb.toString();
-    }
-
-    private static boolean constantTimeEquals(String a, String b) {
-        if (a == null || b == null || a.length() != b.length()) return false;
-        int diff = 0;
-        for (int i = 0; i < a.length(); i++) {
-            diff |= a.charAt(i) ^ b.charAt(i);
-        }
-        return diff == 0;
+        if (Crypto.isKdfStored(stored)) return Crypto.matchesKdf(raw, stored);
+        return Crypto.constantTimeEquals(Crypto.sha256Hex(raw + salt), stored);
     }
 
     private static String str(Object o) {

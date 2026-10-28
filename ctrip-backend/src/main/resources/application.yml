@@ -26,12 +26,32 @@ ctrip:
     # 本地演示保持 true；一旦服务对外可达就设 false，否则任何本地网页都能冒充页面来源。
     allow-file-origin: true
   auth:
-    # 防刷阈值，默认值按「服务可能被外人访问」设定。
-    # 跑 qa/smoke.sh 时一个小时内会注册好几个测试账号，若被 max-register-per-hour 限流，
-    # 脚本会给出提示：把下面的值临时调大再重启后端即可（跑完记得改回来）。
+    # 防刷阈值。生产口径是「同一 IP 每小时 5 次注册尝试」（代码里的默认值就是这个数）；
+    # 这里放宽到 30，因为 qa/smoke.sh 每次运行要注册 6 个账号
+    # （弱口令反例 + smoke_a/b/c/sms + 手机号注册），而脚本结尾又会把它们全删掉，
+    # 于是同一小时内连跑几次就会撞自己的防刷墙——表现是相关用例变 SKIP/FAIL 而不是功能坏了。
+    # 对外部署请改回 5，或用环境变量 CTRIP_AUTH_MAX_REGISTER_PER_HOUR 覆盖，不必改文件。
     max-login-failures: 5
     lock-minutes: 15
-    max-register-per-hour: 5
+    max-register-per-hour: 30
+    # 手机验证码登录：码有效期 / 同一号码重发间隔 / 每小时发码上限 / 可校验失败次数
+    sms-code-ttl-seconds: 300
+    sms-resend-seconds: 60
+    sms-max-per-hour: 5
+    # 同一 IP 每小时发码上限：挡住拿一批号码把短信配额刷爆的行为
+    sms-max-per-hour-ip: 20
+    sms-max-attempts: 5
+    # 演示站没有短信网关。开了这个开关，发码接口把明文码一并返回、页面显示出来，
+    # 否则只写在后端日志里。接了真网关或服务可能被别人访问时，必须设回 false。
+    expose-sms-code: true
+    # 扫码登录：二维码场景有效期（秒）。手机确认页地址前缀留空时按请求 Host 推断，
+    # 但手机扫不到 localhost——要真机演示就填本机局域网地址，例如
+    #   qrcode-confirm-base: http://192.168.1.23:8080/scan?scene=
+    qrcode-ttl-seconds: 120
+    # 同一 IP 每分钟能生成多少个扫码场景：一次创建就是一行数据库写入，
+    # 不限制的话写个循环能把 login_qrcode 撑大（清理任务只删过期一天的行）
+    qrcode-max-per-minute: 10
+    qrcode-confirm-base: ""
   order:
     # 支付窗口（分钟）：下单只是锁定库存并生成「待支付」订单，超过这个时间没付就由
     # OrderExpiryTask 自动取消并回补库存。演示时想马上看到超时效果，改成 1 即可。

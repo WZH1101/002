@@ -90,6 +90,12 @@ public class IndexController {
                       <li><code>GET /api/flights?from=北京&amp;to=上海</code> 机票搜索</li>
                       <li><code>GET /api/buses?from=北京&amp;to=天津</code> 汽车票搜索</li>
                       <li><code>POST /api/auth/register|login|logout</code>、<code>GET /api/auth/me</code> 账号与登录态</li>
+                      <li>登录三种方式：账号密码 <code>POST /api/auth/login</code> · 手机验证码
+                          <code>/api/auth/sms/send</code> + <code>/api/auth/sms/login</code> ·
+                          扫码 <code>POST /api/auth/qrcode</code> 出二维码，手机打开 <code>GET /scan?scene=…</code> 确认后由本端轮询领取</li>
+                      <li>注册两种方式：用户名+密码 <code>POST /api/auth/register</code> · 手机号+验证码
+                          （<code>/api/auth/sms/register-code</code> 发码，再带 <code>code</code> 提交同一接口，建号当场签发会话）</li>
+                      <li><code>POST /api/support/chat</code> 7×24 客服问答 —— <b>规则演示，未接大模型</b>；无需登录，单条 500 字上限、单 IP 每分钟 30 条</li>
                       <li><code>POST /api/auth/password</code> 修改密码 · <b>改密后全端令牌失效</b></li>
                       <li><code>POST /api/orders</code> 下单（生成<b>待支付</b>订单并锁定库存）· <code>GET /api/orders</code> 本人订单列表</li>
                       <li><code>POST /api/orders/{orderNo}/pay|cancel|refund</code> 支付 / 取消 / 退款 · <code>DELETE /api/orders/{orderNo}</code> 删除已取消或已退款订单</li>
