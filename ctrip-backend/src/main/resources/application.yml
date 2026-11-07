@@ -27,8 +27,8 @@ ctrip:
     allow-file-origin: true
   auth:
     # 防刷阈值。生产口径是「同一 IP 每小时 5 次注册尝试」（代码里的默认值就是这个数）；
-    # 这里放宽到 30，因为 qa/smoke.sh 每次运行要注册 6 个账号
-    # （弱口令反例 + smoke_a/b/c/sms + 手机号注册），而脚本结尾又会把它们全删掉，
+    # 这里放宽到 30，因为 qa/smoke.sh 每次运行要注册 6 个以上账号
+    # （弱口令反例 + smoke_a/b/c/sms + 手机号注册 + 邮箱注册），而脚本结尾又会把它们全删掉，
     # 于是同一小时内连跑几次就会撞自己的防刷墙——表现是相关用例变 SKIP/FAIL 而不是功能坏了。
     # 对外部署请改回 5，或用环境变量 CTRIP_AUTH_MAX_REGISTER_PER_HOUR 覆盖，不必改文件。
     max-login-failures: 5
@@ -44,6 +44,17 @@ ctrip:
     # 演示站没有短信网关。开了这个开关，发码接口把明文码一并返回、页面显示出来，
     # 否则只写在后端日志里。接了真网关或服务可能被别人访问时，必须设回 false。
     expose-sms-code: true
+    # 邮箱验证码：规则与短信同构，但默认有效期给 10 分钟（邮箱比短信读得慢，很多人一天只看两次）。
+    # 本项目没有 SMTP 依赖（离线仓库里没有 spring-boot-starter-mail），所以「发信」= 写日志 + 回显，
+    # 见 EmailCodeService.deliver 与下面的 expose-email-code。
+    email-code-ttl-seconds: 600
+    email-resend-seconds: 60
+    email-max-per-hour: 5
+    email-max-per-hour-ip: 20
+    email-max-attempts: 5
+    # 与 expose-sms-code 同一性质的演示开关：关掉后明文码只进后端日志。
+    # 服务对外可达时必须设 false，否则任何人调接口就能拿到别人邮箱的验证码。
+    expose-email-code: true
     # 扫码登录：二维码场景有效期（秒）。手机确认页地址前缀留空时按请求 Host 推断，
     # 但手机扫不到 localhost——要真机演示就填本机局域网地址，例如
     #   qrcode-confirm-base: http://192.168.1.23:8080/scan?scene=
@@ -52,6 +63,13 @@ ctrip:
     # 不限制的话写个循环能把 login_qrcode 撑大（清理任务只删过期一天的行）
     qrcode-max-per-minute: 10
     qrcode-confirm-base: ""
+    # 第三方账号授权（微信/QQ/微博）：state 有效期与每分钟发起上限，口径与扫码一致。
+    # 授权页地址前缀留空时同样把 localhost 换成本机局域网 IPv4。
+    # 演示站这张授权页由本站直出（/oauth/authorize），接真渠道后请改为渠道回调：
+    #   oauth-authorize-base 那一项就不再使用，改配各渠道的 appid/secret 与回调地址。
+    oauth-ttl-seconds: 120
+    oauth-max-per-minute: 10
+    oauth-authorize-base: ""
   order:
     # 支付窗口（分钟）：下单只是锁定库存并生成「待支付」订单，超过这个时间没付就由
     # OrderExpiryTask 自动取消并回补库存。演示时想马上看到超时效果，改成 1 即可。

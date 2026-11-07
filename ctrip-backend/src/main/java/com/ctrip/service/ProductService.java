@@ -178,12 +178,16 @@ public class ProductService {
 
     // ==================== 新模块搜索（旅游/用车/礼品卡/全球购） ====================
 
-    /** 度假线路：指定城市 + 全国通用线路 */
-    public List<Map<String, Object>> searchVacations(String city) {
-        List<Map<String, Object>> rows = query(
-                "SELECT * FROM vacation_product WHERE city = ? OR city = '全国' ORDER BY score DESC", city);
+    /** 度假线路：指定城市 + 全国通用线路，可按产品类目(style)过滤 */
+    public List<Map<String, Object>> searchVacations(String city, String style) {
+        final boolean byStyle = style != null && !style.trim().isEmpty();
+        List<Map<String, Object>> rows = byStyle
+                ? query("SELECT * FROM vacation_product WHERE (city = ? OR city = '全国') AND style = ? ORDER BY score DESC", city, style.trim())
+                : query("SELECT * FROM vacation_product WHERE city = ? OR city = '全国' ORDER BY score DESC", city);
         if (rows.isEmpty()) {
-            rows = query("SELECT * FROM vacation_product WHERE city = '全国' ORDER BY score DESC");
+            rows = byStyle
+                    ? query("SELECT * FROM vacation_product WHERE city = '全国' AND style = ? ORDER BY score DESC", style.trim())
+                    : query("SELECT * FROM vacation_product WHERE city = '全国' ORDER BY score DESC");
         }
         List<Map<String, Object>> out = new ArrayList<>();
         for (Map<String, Object> row : rows) {

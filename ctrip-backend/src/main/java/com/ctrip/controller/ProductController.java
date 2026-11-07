@@ -55,8 +55,9 @@ public class ProductController {
     // ==================== 新模块（旅游/用车/礼品卡/全球购） ====================
 
     @GetMapping("/vacations")
-    public ApiResponse<List<Map<String, Object>>> vacations(@RequestParam String city) {
-        return ApiResponse.ok(service.searchVacations(city));
+    public ApiResponse<List<Map<String, Object>>> vacations(@RequestParam String city,
+            @RequestParam(required = false) String style) {
+        return ApiResponse.ok(service.searchVacations(city, style));
     }
 
     @GetMapping("/cars")

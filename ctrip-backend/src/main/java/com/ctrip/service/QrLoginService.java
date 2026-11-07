@@ -4,12 +4,8 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 
-import java.net.Inet4Address;
-import java.net.InetAddress;
-import java.net.NetworkInterface;
 import java.sql.Timestamp;
 import java.time.Instant;
-import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -90,8 +86,7 @@ public class QrLoginService {
 
     /**
      * 确认页地址前缀。配置项优先；没配置时按请求推断——但 {@code localhost} 是
-     * 「你这台机器」，手机根本解不开，所以发现是本机回环地址就换成局域网 IPv4，
-     * 拿不到局域网地址（例如没联网）才退回原 Host。
+     * 「你这台机器」，手机根本解不开，所以交给 {@link LocalUrl} 换成局域网 IPv4。
      */
     private String confirmBase(String scheme, String host, int port) {
         if (!configuredBase.isEmpty()) {
@@ -99,32 +94,7 @@ public class QrLoginService {
                     ? configuredBase
                     : configuredBase + (configuredBase.endsWith("/") ? "" : "/") + "scan?scene=";
         }
-        String authority = host == null ? "localhost:" + port : host;
-        if (authority.startsWith("localhost") || authority.startsWith("127.")) {
-            String lan = siteLocalIpv4();
-            if (lan != null) {
-                authority = lan + ":" + port;
-            }
-        }
-        String s = scheme == null ? "http" : scheme;
-        return s + "://" + authority + "/scan?scene=";
-    }
-
-    /** 挑一个站内可路由的 IPv4 地址；返回 null 表示这台机器只有一个回环口 */
-    private static String siteLocalIpv4() {
-        try {
-            for (NetworkInterface ni : Collections.list(NetworkInterface.getNetworkInterfaces())) {
-                if (!ni.isUp() || ni.isLoopback()) continue;
-                for (InetAddress addr : Collections.list(ni.getInetAddresses())) {
-                    if (addr instanceof Inet4Address && addr.isSiteLocalAddress()) {
-                        return addr.getHostAddress();
-                    }
-                }
-            }
-        } catch (Exception ignore) {
-            // 读网卡失败就退回请求里的 Host，不影响功能——配置项本来就能覆盖
-        }
-        return null;
+        return LocalUrl.root(scheme, host, port) + "/scan?scene=";
     }
 
     /**

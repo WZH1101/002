@@ -314,6 +314,9 @@ INSERT INTO flight(from_city,to_city,flight_no,airline,plane,from_airport,to_air
 -- 汽车票无预置数据，由后端按客运定价规律（0.3元/公里、均速80km/h）首次搜索时生成入库
 
 -- 2026-10-25 新增：用户表（登录注册）
+-- 2026-10-28 变更：口令注册通道下线后，username 一律由服务端按「m+手机号 / e+邮箱前缀」自动生成，
+-- 用户真正记住的凭据是手机号或邮箱，所以 email 也带唯一索引（NULL 不参与唯一约束，
+-- 早期只有手机号的账号留空即可）。
 CREATE TABLE IF NOT EXISTS app_user (
   id BIGINT AUTO_INCREMENT PRIMARY KEY,
   username VARCHAR(50) NOT NULL UNIQUE,
@@ -321,6 +324,7 @@ CREATE TABLE IF NOT EXISTS app_user (
   salt VARCHAR(64) NOT NULL,
   nickname VARCHAR(50),
   phone VARCHAR(20),
+  email VARCHAR(128) UNIQUE,
   auth_ver INT NOT NULL DEFAULT 0,   -- 凭证版本号：改密码即 +1，旧令牌随之全部失效
   create_time DATETIME DEFAULT CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
@@ -365,6 +369,55 @@ CREATE TABLE IF NOT EXISTS login_qrcode (
   confirm_time DATETIME NULL,
   expire_time DATETIME NOT NULL,
   KEY idx_qr_expire (expire_time)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- 2026-10-28 新增：邮箱验证码。与 sms_code 同构（只存 PBKDF2 哈希、一次性、失败次数达上限即作废），
+-- 单开一张表而不是给 sms_code 加通用 target 列：列名 phone 的语义、限流维度与规则都不同，
+-- 混用会让「按号码合算的跨场景配额」变成「按一个含糊的 target 字符串合算」。
+CREATE TABLE IF NOT EXISTS email_code (
+  id BIGINT AUTO_INCREMENT PRIMARY KEY,
+  email VARCHAR(128) NOT NULL,
+  scene VARCHAR(16) NOT NULL DEFAULT 'register',   -- register / login
+  code_hash VARCHAR(128) NOT NULL,                 -- pbkdf2$迭代数$盐$哈希
+  attempts INT NOT NULL DEFAULT 0,                 -- 已校验失败次数，超过上限直接作废
+  used TINYINT NOT NULL DEFAULT 0,
+  create_time DATETIME DEFAULT CURRENT_TIMESTAMP,
+  expire_time DATETIME NOT NULL,
+  KEY idx_email_code_target (email, scene, used, expire_time),
+  KEY idx_email_code_expire (expire_time)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- 2026-10-28 新增：第三方授权场景（微信/QQ/微博一类「用第三方账号登录」的路）。
+-- 与 login_qrcode 一样必须落库：授权页与发起页是两次互不相干的请求。
+-- 这里存的是第三方「声称」的账号身份（open_id/昵称/头像），不存任何令牌；
+-- 会话是发起方轮询领取那一刻现签的，领取成功后整行删除，与扫码同一口径。
+CREATE TABLE IF NOT EXISTS oauth_scene (
+  state CHAR(32) PRIMARY KEY,
+  provider VARCHAR(16) NOT NULL,                   -- wechat / qq / weibo
+  status VARCHAR(16) NOT NULL DEFAULT 'PENDING',   -- PENDING/APPROVED/REJECTED/EXPIRED/CLAIMED
+  open_id VARCHAR(64) NULL,                        -- 授权通过后第三方给的账号标识
+  nickname VARCHAR(64) NULL,
+  avatar VARCHAR(8) NULL,                          -- 头像取色（演示站没有真实头像 URL）
+  create_time DATETIME DEFAULT CURRENT_TIMESTAMP,
+  approve_time DATETIME NULL,
+  expire_time DATETIME NOT NULL,
+  KEY idx_oauth_expire (expire_time)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- 2026-10-28 新增：第三方账号与本站账号的绑定关系。
+-- UNIQUE(provider, open_id) 是「同一个人第二次授权落到同一个账号」的唯一依据，
+-- 也是第三方注册唯一性的真正兜底（先查后插只负责给清楚的提示）。
+CREATE TABLE IF NOT EXISTS user_oauth (
+  id BIGINT AUTO_INCREMENT PRIMARY KEY,
+  provider VARCHAR(16) NOT NULL,
+  open_id VARCHAR(64) NOT NULL,
+  user_id BIGINT NOT NULL,
+  nickname VARCHAR(64) NULL,                       -- 授权时第三方给的昵称，仅作展示与比对
+  avatar VARCHAR(8) NULL,
+  create_time DATETIME DEFAULT CURRENT_TIMESTAMP,
+  last_login_time DATETIME NULL,
+  UNIQUE KEY uk_oauth_identity (provider, open_id),
+  KEY idx_oauth_user (user_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- 2026-10-25 新增：拓展模块表（旅游/用车/礼品卡/全球购/企业商旅），种子数据见 tools/seed-modules.js

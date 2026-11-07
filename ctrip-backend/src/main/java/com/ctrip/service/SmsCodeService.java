@@ -44,6 +44,8 @@ public class SmsCodeService {
 
     public static final String SCENE_LOGIN = "login";
     public static final String SCENE_REGISTER = "register";
+    /** 找回密码：号码必须已注册（与登录同一要求），验码通过即可重置口令；多账号时由页面选定重置哪一个 */
+    public static final String SCENE_RESET = "reset";
 
     /** 内存计数器条数上限：超过就清掉不属于当前小时的条目，避免公网长跑把堆吃满（见 throttleIp） */
     private static final int COUNTER_CAP = 10_000;
@@ -92,6 +94,14 @@ public class SmsCodeService {
         return sendCode(phone, clientIp, SCENE_REGISTER);
     }
 
+    /**
+     * 找回密码发码。号码必须已注册——重置口令等于接管账号，必须先证明「这个号码在你的手机上」。
+     * 一个号码挂着多个账号时照样发码：验证码只证明号码归属，要重置哪一个由验码后的选账号环节决定。
+     */
+    public Map<String, Object> sendResetCode(String phone, String clientIp) {
+        return sendCode(phone, clientIp, SCENE_RESET);
+    }
+
     private Map<String, Object> sendCode(String phone, String clientIp, String scene) {
         if (phone == null || !phone.matches("1[3-9]\\d{9}")) {
             throw new IllegalStateException("请输入11位有效手机号码");
@@ -100,12 +110,10 @@ public class SmsCodeService {
 
         List<Map<String, Object>> owners = jdbc.queryForList(
                 "SELECT id FROM app_user WHERE phone = ? ORDER BY id", phone);
-        if (SCENE_LOGIN.equals(scene)) {
+        // 登录与找回密码：号码必须已注册（一个号码挂多个账号也允许发码，验码后由页面选账号）；注册场景则相反，号码必须未注册
+        if (SCENE_LOGIN.equals(scene) || SCENE_RESET.equals(scene)) {
             if (owners.isEmpty()) {
-                throw new IllegalStateException("该手机号未注册，请先注册或用账号密码登录");
-            }
-            if (owners.size() > 1) {
-                throw new IllegalStateException("该手机号绑定了 " + owners.size() + " 个账号，请用账号密码登录");
+                throw new IllegalStateException("该手机号未注册，请先注册");
             }
         } else {
             if (!owners.isEmpty()) {
@@ -153,6 +161,11 @@ public class SmsCodeService {
     /** 注册场景校验：一次性、尝试次数、有效期规则与登录码完全一致 */
     public boolean verifyRegisterCode(String phone, String code) {
         return verifyCode(phone, code, SCENE_REGISTER);
+    }
+
+    /** 找回密码场景校验：规则与登录码完全一致，只是 scene 不同，一张码不能既登录又改密 */
+    public boolean verifyResetCode(String phone, String code) {
+        return verifyCode(phone, code, SCENE_RESET);
     }
 
     private boolean verifyCode(String phone, String code, String scene) {

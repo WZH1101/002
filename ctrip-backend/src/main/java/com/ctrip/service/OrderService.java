@@ -35,7 +35,8 @@ import java.util.Map;
  * </ol>
  *
  * <p>归属：只有订单的 user_id 等于当前会话用户才允许支付/取消/退款/删除；
- * 加 user_id 之前那批无主历史订单在列表里可见（避免升级后「丢单」），但任何写操作都不放行。
+ * 加 user_id 之前那批无主历史订单，在列出时就地认领给当前账号（见 {@link #listOrders}），
+ * 认领之后归属与可操作性都和普通订单一致。
  */
 @Service
 public class OrderService {
@@ -147,13 +148,20 @@ public class OrderService {
      * 订单列表（最新在前）：本人下的单 + 加 user_id 列之前的历史订单。
      * 四种状态都返回——订单中心要能看到「已取消/已退款」，用户才敢放心取消。
      *
-     * <p>把 NULL 一并返回是有意的：老订单无从判断归属，若按归属严格过滤，
-     * 用户会在升级后突然「丢单」。替家人朋友订票时 contact phone 是乘机人的，
-     * 所以归属只看 user_id，绝不能用 phone 去筛。
+     * <p>替家人朋友订票时 contact phone 是乘机人的，所以归属只看 user_id，绝不能用 phone 去筛。
+     *
+     * <p>无主历史单（{@code user_id IS NULL}）在列出时就地认领给当前账号。
+     * 以前只是把它们一并返回、四个可操作性标志恒为 {@code false}，于是订单中心里会出现
+     * 两笔同样「已支付」的单子——自己下的能点「申请退款」，无主的那笔按钮直接消失，
+     * 可见却按不动，用户只会当成 bug。这批单本来就没有归属信息可判，演示站里也就是
+     * 这台浏览器自己产下的，所以采用 README 原先写下的那条断开方式（一条 UPDATE 认领），
+     * 并把动作放在列表接口里自动做掉：认领后归属、按钮、写操作校验全部与普通单一致。
      */
+    @Transactional
     public List<Map<String, Object>> listOrders(long userId) {
+        jdbc.update("UPDATE travel_order SET user_id = ? WHERE user_id IS NULL", userId);
         List<Map<String, Object>> rows = jdbc.queryForList(
-                SELECT_ORDER_COLUMNS + " WHERE user_id = ? OR user_id IS NULL ORDER BY id DESC LIMIT 200", userId);
+                SELECT_ORDER_COLUMNS + " WHERE user_id = ? ORDER BY id DESC LIMIT 200", userId);
         return rows.stream().map(r -> toOrderView(r, userId)).toList();
     }
 
