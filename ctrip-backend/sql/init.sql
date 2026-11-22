@@ -3,7 +3,7 @@
 CREATE DATABASE IF NOT EXISTS ctrip_travel CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 USE ctrip_travel;
 
-DROP TABLE IF EXISTS hotel, attraction, train_ticket, flight, bus_ticket, travel_order;
+DROP TABLE IF EXISTS hotel, attraction, train_ticket, flight, bus_ticket, travel_order, order_change;
 
 CREATE TABLE hotel (
   id BIGINT AUTO_INCREMENT PRIMARY KEY,
@@ -67,6 +67,24 @@ CREATE TABLE travel_order (
   -- 幂等键按「人」唯一，而不是全局唯一：前端订单号是 C+毫秒时间戳，
   -- 两个人同一毫秒下单并不冲突，全局唯一会把第二个人的正常订单误判成重复提交
   UNIQUE KEY uk_order_idem (idem_key, user_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- 改签记录：一笔订单改签几次就几行，seq 从 1 递增（OrderService.changeOrder 写入）
+CREATE TABLE order_change (
+  id BIGINT AUTO_INCREMENT PRIMARY KEY,
+  order_no VARCHAR(32) NOT NULL,
+  seq INT NOT NULL,
+  old_item_id BIGINT, new_item_id BIGINT,
+  old_title VARCHAR(256), new_title VARCHAR(256),
+  old_date_text VARCHAR(128), new_date_text VARCHAR(128),
+  old_choice VARCHAR(64), new_choice VARCHAR(64),
+  old_unit_price DECIMAL(10,2), old_total_price DECIMAL(10,2),
+  new_unit_price DECIMAL(10,2), new_total_price DECIMAL(10,2),
+  fee DECIMAL(10,2) NOT NULL DEFAULT 0,
+  diff DECIMAL(10,2) NOT NULL DEFAULT 0,   -- 正数补差价 / 负数退差额
+  create_time DATETIME DEFAULT CURRENT_TIMESTAMP,
+  KEY idx_change_order (order_no),
+  UNIQUE KEY uk_change_seq (order_no, seq)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- 真实酒店数据（名称/星级/价格参照平台公开价）
@@ -141,7 +159,7 @@ INSERT INTO attraction(city,name,level,score,open_time,area,tags,base_price,tick
 ('杭州', '西溪国家湿地公园', '5A景区', '4.3', '08:30-17:30', '东郊', '["湿地生态","亲子出游"]', 80, '[{"name":"成人票","desc":"适用于1.5米以上游客","price":80},{"name":"儿童票","desc":"身高1.2-1.5米（半价）","price":40},{"name":"学生票","desc":"凭有效学生证（约6折）","price":48}]'),
 ('成都', '成都大熊猫繁育研究基地', '4A景区', '4.6', '08:30-17:30', '西郊', '["网红打卡","亲子出游","需预约"]', 55, '[{"name":"成人票","desc":"适用于1.5米以上游客","price":55},{"name":"儿童票","desc":"身高1.2-1.5米（半价）","price":28},{"name":"学生票","desc":"凭有效学生证（约6折）","price":33}]'),
 ('成都', '都江堰景区', '5A景区', '4.7', '08:30-17:30', '滨湖新区', '["世界文化遗产","水利工程"]', 80, '[{"name":"成人票","desc":"适用于1.5米以上游客","price":80},{"name":"儿童票","desc":"身高1.2-1.5米（半价）","price":40},{"name":"学生票","desc":"凭有效学生证（约6折）","price":48}]'),
-('成都', '青城山前山', '5A景区', '4.8', '08:30-17:30', '城南', '["道教名山","世界文化遗产"]', 90, '[{"name":"成人票","desc":"适用于1.5米以上游客","price":90},{"name":"儿童票","desc":"身高1.2-1.5米（半价）","price":45},{"name":"学生票","desc":"凭有效学生证（约6折）","price":54}]'),
+('成都', '青城山前山', '5A景区', '4.8', '08:30-17:30', '城南', '["道教名山","世界文化遗产"]', 80, '[{"name":"成人票","desc":"适用于1.5米以上游客","price":80},{"name":"儿童票","desc":"身高1.2-1.5米（半价）","price":40},{"name":"学生票","desc":"凭有效学生证（约6折）","price":48}]'),
 ('成都', '成都武侯祠博物馆', '4A景区', '4.2', '08:30-17:30', '市中心', '["三国文化","网红打卡"]', 50, '[{"name":"成人票","desc":"适用于1.5米以上游客","price":50},{"name":"儿童票","desc":"身高1.2-1.5米（半价）","price":25},{"name":"学生票","desc":"凭有效学生证（约6折）","price":30}]'),
 ('西安', '秦始皇兵马俑博物馆', '5A景区', '4.3', '08:30-17:30', '东郊', '["世界文化遗产","需预约","含讲解"]', 120, '[{"name":"成人票","desc":"适用于1.5米以上游客","price":120},{"name":"儿童票","desc":"身高1.2-1.5米（半价）","price":60},{"name":"学生票","desc":"凭有效学生证（约6折）","price":72}]'),
 ('西安', '华清宫', '5A景区', '4.3', '08:30-17:30', '西郊', '["皇家园林","温泉文化"]', 120, '[{"name":"成人票","desc":"适用于1.5米以上游客","price":120},{"name":"儿童票","desc":"身高1.2-1.5米（半价）","price":60},{"name":"学生票","desc":"凭有效学生证（约6折）","price":72}]'),
@@ -171,8 +189,8 @@ INSERT INTO train_ticket(from_city,to_city,train_no,type_code,type_name,from_sta
 ('北京', '上海', 'G21', 'G', '高铁', '北京南', '上海虹桥', '18:00', '22:29', '4时29分', '[{"name":"商务座","price":1748,"count":59},{"name":"一等座","price":1061,"count":63},{"name":"二等座","price":662,"count":169},{"name":"无座","price":662,"count":43}]'),
 ('北京', '上海', 'G25', 'G', '高铁', '北京南', '上海虹桥', '19:00', '23:28', '4时28分', '[{"name":"商务座","price":1748,"count":65},{"name":"一等座","price":933,"count":40},{"name":"二等座","price":553,"count":135},{"name":"无座","price":553,"count":23}]'),
 ('北京', '上海', 'D313', 'D', '动车', '北京南', '上海虹桥', '19:08', '次日 07:41', '12时33分', '[{"name":"软卧","price":666.5,"count":6},null,{"name":"二等座","price":338.5,"count":276},{"name":"无座","price":338.5,"count":25}]'),
-('北京', '上海', 'T109', 'T', '特快', '北京南', '上海虹桥', '20:05', '次日 10:02', '13时57分', '[{"name":"软卧","price":448,"count":12},{"name":"硬卧","price":273,"count":34},{"name":"硬座","price":164,"count":260},{"name":"无座","price":164,"count":18}]'),
-('北京', '上海', '1461', 'P', '普快', '北京南', '上海虹桥', '12:20', '次日 08:05', '19时45分', '[{"name":"软卧","price":448,"count":87},{"name":"硬卧","price":273,"count":18},{"name":"硬座","price":164,"count":406},{"name":"无座","price":164,"count":26}]'),
+('北京', '上海', 'T109', 'T', '特快', '北京南', '上海虹桥', '20:05', '次日 10:02', '13时57分', '[{"name":"软卧","price":455.5,"count":12},{"name":"硬卧","price":296.5,"count":34},{"name":"硬座","price":156.5,"count":260},{"name":"无座","price":156.5,"count":18}]'),
+('北京', '上海', '1461', 'P', '普快', '北京南', '上海虹桥', '12:20', '次日 08:05', '19时45分', '[{"name":"软卧","price":455.5,"count":87},{"name":"硬卧","price":296.5,"count":18},{"name":"硬座","price":156.5,"count":406},{"name":"无座","price":156.5,"count":26}]'),
 ('上海', '北京', 'G2', 'G', '高铁', '上海虹桥', '北京南', '09:00', '13:28', '4时28分', '[{"name":"商务座","price":1748,"count":16},{"name":"一等座","price":1061,"count":56},{"name":"二等座","price":662,"count":182},{"name":"无座","price":662,"count":6}]'),
 ('上海', '北京', 'G4', 'G', '高铁', '上海虹桥', '北京南', '10:00', '14:28', '4时28分', '[{"name":"商务座","price":1748,"count":68},{"name":"一等座","price":1061,"count":68},{"name":"二等座","price":662,"count":340},{"name":"无座","price":662,"count":1}]'),
 ('上海', '北京', 'G6', 'G', '高铁', '上海虹桥', '北京南', '11:00', '15:28', '4时28分', '[{"name":"商务座","price":1748,"count":1},{"name":"一等座","price":933,"count":84},{"name":"二等座","price":553,"count":118},{"name":"无座","price":553,"count":44}]'),
@@ -182,74 +200,74 @@ INSERT INTO train_ticket(from_city,to_city,train_no,type_code,type_name,from_sta
 ('上海', '北京', 'G18', 'G', '高铁', '上海虹桥', '北京南', '18:00', '22:28', '4时28分', '[{"name":"商务座","price":1748,"count":68},{"name":"一等座","price":1061,"count":48},{"name":"二等座","price":662,"count":337},{"name":"无座","price":662,"count":38}]'),
 ('上海', '北京', 'G22', 'G', '高铁', '上海虹桥', '北京南', '19:00', '23:28', '4时28分', '[{"name":"商务座","price":1748,"count":64},{"name":"一等座","price":933,"count":88},{"name":"二等座","price":553,"count":130},{"name":"无座","price":553,"count":16}]'),
 ('上海', '北京', 'D314', 'D', '动车', '上海虹桥', '北京南', '21:08', '次日 07:54', '10时46分', '[{"name":"软卧","price":666.5,"count":20},null,{"name":"二等座","price":338.5,"count":180},{"name":"无座","price":338.5,"count":44}]'),
-('上海', '北京', 'T110', 'T', '特快', '上海虹桥', '北京南', '18:02', '次日 09:30', '15时28分', '[{"name":"软卧","price":448,"count":60},{"name":"硬卧","price":273,"count":33},{"name":"硬座","price":164,"count":165},{"name":"无座","price":164,"count":18}]'),
-('上海', '北京', '1462', 'P', '普快', '上海虹桥', '北京南', '12:18', '次日 08:12', '19时54分', '[{"name":"软卧","price":448,"count":30},{"name":"硬卧","price":273,"count":88},{"name":"硬座","price":164,"count":169},{"name":"无座","price":164,"count":68}]'),
-('北京', '广州', 'G79', 'G', '高铁', '北京南', '广州南', '10:00', '17:30', '7时30分', '[{"name":"商务座","price":2303,"count":41},{"name":"一等座","price":1218.5,"count":40},{"name":"二等座","price":767.5,"count":245},{"name":"无座","price":767.5,"count":89}]'),
-('北京', '广州', 'G65', 'G', '高铁', '北京南', '广州南', '09:00', '17:02', '8时2分', '[{"name":"商务座","price":2303,"count":62},{"name":"一等座","price":1218.5,"count":28},{"name":"二等座","price":767.5,"count":120},{"name":"无座","price":767.5,"count":44}]'),
-('北京', '广州', 'G81', 'G', '高铁', '北京南', '广州南', '14:00', '22:18', '8时18分', '[{"name":"商务座","price":2303,"count":54},{"name":"一等座","price":1218.5,"count":28},{"name":"二等座","price":767.5,"count":338},{"name":"无座","price":767.5,"count":59}]'),
+('上海', '北京', 'T110', 'T', '特快', '上海虹桥', '北京南', '18:02', '次日 09:30', '15时28分', '[{"name":"软卧","price":455.5,"count":60},{"name":"硬卧","price":296.5,"count":33},{"name":"硬座","price":156.5,"count":165},{"name":"无座","price":156.5,"count":18}]'),
+('上海', '北京', '1462', 'P', '普快', '上海虹桥', '北京南', '12:18', '次日 08:12', '19时54分', '[{"name":"软卧","price":455.5,"count":30},{"name":"硬卧","price":296.5,"count":88},{"name":"硬座","price":156.5,"count":169},{"name":"无座","price":156.5,"count":68}]'),
+('北京', '广州', 'G79', 'G', '高铁', '北京南', '广州南', '10:00', '17:30', '7时30分', '[{"name":"商务座","price":2724,"count":41},{"name":"一等座","price":1457,"count":40},{"name":"二等座","price":862,"count":245},{"name":"无座","price":862,"count":89}]'),
+('北京', '广州', 'G65', 'G', '高铁', '北京南', '广州南', '09:00', '17:02', '8时2分', '[{"name":"商务座","price":2724,"count":62},{"name":"一等座","price":1457,"count":28},{"name":"二等座","price":862,"count":120},{"name":"无座","price":862,"count":44}]'),
+('北京', '广州', 'G81', 'G', '高铁', '北京南', '广州南', '14:00', '22:18', '8时18分', '[{"name":"商务座","price":2724,"count":54},{"name":"一等座","price":1457,"count":28},{"name":"二等座","price":862,"count":338},{"name":"无座","price":862,"count":59}]'),
 ('北京', '广州', 'Z35', 'Z', '直达', '北京南', '广州南', '19:47', '次日 15:52', '20时5分', '[{"name":"软卧","price":684.5,"count":48},{"name":"硬卧","price":417.5,"count":25},{"name":"硬座","price":250.5,"count":361},{"name":"无座","price":250.5,"count":54}]'),
 ('北京', '广州', 'T15', 'T', '特快', '北京南', '广州南', '22:32', '次日 19:16', '20时44分', '[{"name":"软卧","price":684.5,"count":4},{"name":"硬卧","price":417.5,"count":22},{"name":"硬座","price":250.5,"count":360},{"name":"无座","price":250.5,"count":1}]'),
 ('北京', '广州', 'K597', 'K', '快速', '北京南', '广州南', '14:40', '次日 14:09', '23时29分', '[{"name":"软卧","price":684.5,"count":81},{"name":"硬卧","price":417.5,"count":28},{"name":"硬座","price":250.5,"count":161},{"name":"无座","price":250.5,"count":59}]'),
-('广州', '北京', 'G80', 'G', '高铁', '广州南', '北京南', '11:00', '18:30', '7时30分', '[{"name":"商务座","price":2303,"count":72},{"name":"一等座","price":1218.5,"count":20},{"name":"二等座","price":767.5,"count":95},{"name":"无座","price":767.5,"count":49}]'),
-('广州', '北京', 'G66', 'G', '高铁', '广州南', '北京南', '10:00', '18:02', '8时2分', '[{"name":"商务座","price":2303,"count":87},{"name":"一等座","price":1218.5,"count":41},{"name":"二等座","price":767.5,"count":199},{"name":"无座","price":767.5,"count":71}]'),
-('广州', '北京', 'G82', 'G', '高铁', '广州南', '北京南', '15:00', '23:08', '8时8分', '[{"name":"商务座","price":2303,"count":53},{"name":"一等座","price":1218.5,"count":82},{"name":"二等座","price":767.5,"count":292},{"name":"无座","price":767.5,"count":72}]'),
+('广州', '北京', 'G80', 'G', '高铁', '广州南', '北京南', '11:00', '18:30', '7时30分', '[{"name":"商务座","price":2724,"count":72},{"name":"一等座","price":1457,"count":20},{"name":"二等座","price":862,"count":95},{"name":"无座","price":862,"count":49}]'),
+('广州', '北京', 'G66', 'G', '高铁', '广州南', '北京南', '10:00', '18:02', '8时2分', '[{"name":"商务座","price":2724,"count":87},{"name":"一等座","price":1457,"count":41},{"name":"二等座","price":862,"count":199},{"name":"无座","price":862,"count":71}]'),
+('广州', '北京', 'G82', 'G', '高铁', '广州南', '北京南', '15:00', '23:08', '8时8分', '[{"name":"商务座","price":2724,"count":53},{"name":"一等座","price":1457,"count":82},{"name":"二等座","price":862,"count":292},{"name":"无座","price":862,"count":72}]'),
 ('广州', '北京', 'Z36', 'Z', '直达', '广州南', '北京南', '08:50', '次日 05:00', '20时10分', '[{"name":"软卧","price":684.5,"count":80},{"name":"硬卧","price":417.5,"count":31},{"name":"硬座","price":250.5,"count":412},{"name":"无座","price":250.5,"count":45}]'),
 ('广州', '北京', 'T16', 'T', '特快', '广州南', '北京南', '12:00', '次日 08:30', '20时30分', '[{"name":"软卧","price":684.5,"count":81},{"name":"硬卧","price":417.5,"count":56},{"name":"硬座","price":250.5,"count":325},{"name":"无座","price":250.5,"count":32}]'),
-('武汉', '广州', 'G1001', 'G', '高铁', '武汉', '广州南', '07:00', '11:02', '4时2分', '[{"name":"商务座","price":1267.5,"count":75},{"name":"一等座","price":670.5,"count":69},{"name":"二等座","price":422.5,"count":351},{"name":"无座","price":422.5,"count":76}]'),
-('武汉', '广州', 'G1023', 'G', '高铁', '武汉', '广州南', '09:00', '13:02', '4时2分', '[{"name":"商务座","price":1267.5,"count":34},{"name":"一等座","price":670.5,"count":89},{"name":"二等座","price":422.5,"count":87},{"name":"无座","price":422.5,"count":46}]'),
-('武汉', '广州', 'G1035', 'G', '高铁', '武汉', '广州南', '11:00', '15:02', '4时2分', '[{"name":"商务座","price":1267.5,"count":7},{"name":"一等座","price":670.5,"count":44},{"name":"二等座","price":422.5,"count":290},{"name":"无座","price":422.5,"count":33}]'),
-('武汉', '广州', 'G1047', 'G', '高铁', '武汉', '广州南', '14:00', '18:02', '4时2分', '[{"name":"商务座","price":1267.5,"count":76},{"name":"一等座","price":670.5,"count":7},{"name":"二等座","price":422.5,"count":89},{"name":"无座","price":422.5,"count":52}]'),
-('武汉', '广州', 'G1105', 'G', '高铁', '武汉', '广州南', '16:00', '20:02', '4时2分', '[{"name":"商务座","price":1267.5,"count":78},{"name":"一等座","price":670.5,"count":52},{"name":"二等座","price":422.5,"count":356},{"name":"无座","price":422.5,"count":13}]'),
-('武汉', '广州', 'G1121', 'G', '高铁', '武汉', '广州南', '18:00', '22:02', '4时2分', '[{"name":"商务座","price":1267.5,"count":27},{"name":"一等座","price":670.5,"count":23},{"name":"二等座","price":422.5,"count":342},{"name":"无座","price":422.5,"count":36}]'),
+('武汉', '广州', 'G1001', 'G', '高铁', '武汉', '广州南', '07:00', '11:02', '4时2分', '[{"name":"商务座","price":1464.5,"count":75},{"name":"一等座","price":783.5,"count":69},{"name":"二等座","price":463.5,"count":351},{"name":"无座","price":463.5,"count":76}]'),
+('武汉', '广州', 'G1023', 'G', '高铁', '武汉', '广州南', '09:00', '13:02', '4时2分', '[{"name":"商务座","price":1464.5,"count":34},{"name":"一等座","price":783.5,"count":89},{"name":"二等座","price":463.5,"count":87},{"name":"无座","price":463.5,"count":46}]'),
+('武汉', '广州', 'G1035', 'G', '高铁', '武汉', '广州南', '11:00', '15:02', '4时2分', '[{"name":"商务座","price":1464.5,"count":7},{"name":"一等座","price":783.5,"count":44},{"name":"二等座","price":463.5,"count":290},{"name":"无座","price":463.5,"count":33}]'),
+('武汉', '广州', 'G1047', 'G', '高铁', '武汉', '广州南', '14:00', '18:02', '4时2分', '[{"name":"商务座","price":1464.5,"count":76},{"name":"一等座","price":783.5,"count":7},{"name":"二等座","price":463.5,"count":89},{"name":"无座","price":463.5,"count":52}]'),
+('武汉', '广州', 'G1105', 'G', '高铁', '武汉', '广州南', '16:00', '20:02', '4时2分', '[{"name":"商务座","price":1464.5,"count":78},{"name":"一等座","price":783.5,"count":52},{"name":"二等座","price":463.5,"count":356},{"name":"无座","price":463.5,"count":13}]'),
+('武汉', '广州', 'G1121', 'G', '高铁', '武汉', '广州南', '18:00', '22:02', '4时2分', '[{"name":"商务座","price":1464.5,"count":27},{"name":"一等座","price":783.5,"count":23},{"name":"二等座","price":463.5,"count":342},{"name":"无座","price":463.5,"count":36}]'),
 ('武汉', '广州', 'Z235', 'Z', '直达', '武汉', '广州南', '19:27', '次日 09:45', '14时18分', '[{"name":"软卧","price":376.5,"count":44},{"name":"硬卧","price":229.5,"count":12},{"name":"硬座","price":137.5,"count":468},{"name":"无座","price":137.5,"count":76}]'),
 ('武汉', '广州', 'K1295', 'K', '快速', '武汉', '广州南', '15:00', '次日 08:20', '17时20分', '[{"name":"软卧","price":376.5,"count":43},{"name":"硬卧","price":229.5,"count":17},{"name":"硬座","price":137.5,"count":162},{"name":"无座","price":137.5,"count":75}]'),
-('广州', '武汉', 'G1002', 'G', '高铁', '广州南', '武汉', '07:00', '11:02', '4时2分', '[{"name":"商务座","price":1267.5,"count":15},{"name":"一等座","price":670.5,"count":22},{"name":"二等座","price":422.5,"count":149},{"name":"无座","price":422.5,"count":55}]'),
-('广州', '武汉', 'G1024', 'G', '高铁', '广州南', '武汉', '09:00', '13:02', '4时2分', '[{"name":"商务座","price":1267.5,"count":68},{"name":"一等座","price":670.5,"count":81},{"name":"二等座","price":422.5,"count":269},{"name":"无座","price":422.5,"count":76}]'),
-('广州', '武汉', 'G1048', 'G', '高铁', '广州南', '武汉', '14:00', '18:02', '4时2分', '[{"name":"商务座","price":1267.5,"count":77},{"name":"一等座","price":670.5,"count":37},{"name":"二等座","price":422.5,"count":327},{"name":"无座","price":422.5,"count":35}]'),
-('广州', '武汉', 'G1106', 'G', '高铁', '广州南', '武汉', '16:00', '20:02', '4时2分', '[{"name":"商务座","price":1267.5,"count":30},{"name":"一等座","price":670.5,"count":62},{"name":"二等座","price":422.5,"count":292},{"name":"无座","price":422.5,"count":76}]'),
+('广州', '武汉', 'G1002', 'G', '高铁', '广州南', '武汉', '07:00', '11:02', '4时2分', '[{"name":"商务座","price":1464.5,"count":15},{"name":"一等座","price":783.5,"count":22},{"name":"二等座","price":463.5,"count":149},{"name":"无座","price":463.5,"count":55}]'),
+('广州', '武汉', 'G1024', 'G', '高铁', '广州南', '武汉', '09:00', '13:02', '4时2分', '[{"name":"商务座","price":1464.5,"count":68},{"name":"一等座","price":783.5,"count":81},{"name":"二等座","price":463.5,"count":269},{"name":"无座","price":463.5,"count":76}]'),
+('广州', '武汉', 'G1048', 'G', '高铁', '广州南', '武汉', '14:00', '18:02', '4时2分', '[{"name":"商务座","price":1464.5,"count":77},{"name":"一等座","price":783.5,"count":37},{"name":"二等座","price":463.5,"count":327},{"name":"无座","price":463.5,"count":35}]'),
+('广州', '武汉', 'G1106', 'G', '高铁', '广州南', '武汉', '16:00', '20:02', '4时2分', '[{"name":"商务座","price":1464.5,"count":30},{"name":"一等座","price":783.5,"count":62},{"name":"二等座","price":463.5,"count":292},{"name":"无座","price":463.5,"count":76}]'),
 ('广州', '武汉', 'Z236', 'Z', '直达', '广州南', '武汉', '12:00', '次日 01:30', '13时30分', '[{"name":"软卧","price":376.5,"count":75},{"name":"硬卧","price":229.5,"count":5},{"name":"硬座","price":137.5,"count":395},{"name":"无座","price":137.5,"count":40}]'),
 ('广州', '武汉', 'K1296', 'K', '快速', '广州南', '武汉', '13:30', '次日 06:50', '17时20分', '[{"name":"软卧","price":376.5,"count":88},{"name":"硬卧","price":229.5,"count":49},{"name":"硬座","price":137.5,"count":104},{"name":"无座","price":137.5,"count":58}]'),
-('上海', '广州', 'G85', 'G', '高铁', '上海虹桥', '广州南', '07:00', '14:29', '7时29分', '[{"name":"商务座","price":1923.5,"count":85},{"name":"一等座","price":1017.5,"count":45},{"name":"二等座","price":641,"count":121},{"name":"无座","price":641,"count":63}]'),
-('上海', '广州', 'G99', 'G', '高铁', '上海虹桥', '广州南', '09:00', '16:30', '7时30分', '[{"name":"商务座","price":1923.5,"count":62},{"name":"一等座","price":1017.5,"count":7},{"name":"二等座","price":641,"count":224},{"name":"无座","price":641,"count":0}]'),
-('上海', '广州', 'G1303', 'G', '高铁', '上海虹桥', '广州南', '11:00', '18:30', '7时30分', '[{"name":"商务座","price":1923.5,"count":75},{"name":"一等座","price":1017.5,"count":64},{"name":"二等座","price":641,"count":75},{"name":"无座","price":641,"count":59}]'),
-('上海', '广州', 'D931', 'D', '动车', '上海虹桥', '广州南', '19:05', '次日 06:49', '11时44分', '[{"name":"软卧","price":850.5,"count":38},null,{"name":"二等座","price":432,"count":131},{"name":"无座","price":432,"count":38}]'),
+('上海', '广州', 'G85', 'G', '高铁', '上海虹桥', '广州南', '07:00', '14:29', '7时29分', '[{"name":"商务座","price":2506,"count":85},{"name":"一等座","price":1340,"count":45},{"name":"二等座","price":793,"count":121},{"name":"无座","price":793,"count":63}]'),
+('上海', '广州', 'G99', 'G', '高铁', '上海虹桥', '广州南', '09:00', '16:30', '7时30分', '[{"name":"商务座","price":2506,"count":62},{"name":"一等座","price":1340,"count":7},{"name":"二等座","price":793,"count":224},{"name":"无座","price":793,"count":0}]'),
+('上海', '广州', 'G1303', 'G', '高铁', '上海虹桥', '广州南', '11:00', '18:30', '7时30分', '[{"name":"商务座","price":2506,"count":75},{"name":"一等座","price":1340,"count":64},{"name":"二等座","price":793,"count":75},{"name":"无座","price":793,"count":59}]'),
+('上海', '广州', 'D931', 'D', '动车', '上海虹桥', '广州南', '19:05', '次日 06:49', '11时44分', '[{"name":"软卧","price":1036.5,"count":38},null,{"name":"二等座","price":493.5,"count":131},{"name":"无座","price":493.5,"count":38}]'),
 ('上海', '广州', 'Z99', 'Z', '直达', '上海虹桥', '广州南', '18:02', '次日 10:00', '15时58分', '[{"name":"软卧","price":571.5,"count":25},{"name":"硬卧","price":348.5,"count":10},{"name":"硬座","price":209,"count":149},{"name":"无座","price":209,"count":33}]'),
-('广州', '上海', 'G86', 'G', '高铁', '广州南', '上海虹桥', '08:00', '15:29', '7时29分', '[{"name":"商务座","price":1923.5,"count":72},{"name":"一等座","price":1017.5,"count":83},{"name":"二等座","price":641,"count":201},{"name":"无座","price":641,"count":22}]'),
-('广州', '上海', 'G98', 'G', '高铁', '广州南', '上海虹桥', '10:00', '17:30', '7时30分', '[{"name":"商务座","price":1923.5,"count":38},{"name":"一等座","price":1017.5,"count":87},{"name":"二等座","price":641,"count":211},{"name":"无座","price":641,"count":58}]'),
-('广州', '上海', 'G1304', 'G', '高铁', '广州南', '上海虹桥', '12:00', '19:30', '7时30分', '[{"name":"商务座","price":1923.5,"count":57},{"name":"一等座","price":1017.5,"count":46},{"name":"二等座","price":641,"count":249},{"name":"无座","price":641,"count":11}]'),
-('广州', '上海', 'D932', 'D', '动车', '广州南', '上海虹桥', '20:04', '次日 07:52', '11时48分', '[{"name":"软卧","price":850.5,"count":5},null,{"name":"二等座","price":432,"count":115},{"name":"无座","price":432,"count":89}]'),
+('广州', '上海', 'G86', 'G', '高铁', '广州南', '上海虹桥', '08:00', '15:29', '7时29分', '[{"name":"商务座","price":2506,"count":72},{"name":"一等座","price":1340,"count":83},{"name":"二等座","price":793,"count":201},{"name":"无座","price":793,"count":22}]'),
+('广州', '上海', 'G98', 'G', '高铁', '广州南', '上海虹桥', '10:00', '17:30', '7时30分', '[{"name":"商务座","price":2506,"count":38},{"name":"一等座","price":1340,"count":87},{"name":"二等座","price":793,"count":211},{"name":"无座","price":793,"count":58}]'),
+('广州', '上海', 'G1304', 'G', '高铁', '广州南', '上海虹桥', '12:00', '19:30', '7时30分', '[{"name":"商务座","price":2506,"count":57},{"name":"一等座","price":1340,"count":46},{"name":"二等座","price":793,"count":249},{"name":"无座","price":793,"count":11}]'),
+('广州', '上海', 'D932', 'D', '动车', '广州南', '上海虹桥', '20:04', '次日 07:52', '11时48分', '[{"name":"软卧","price":1036.5,"count":5},null,{"name":"二等座","price":493.5,"count":115},{"name":"无座","price":493.5,"count":89}]'),
 ('广州', '上海', 'Z100', 'Z', '直达', '广州南', '上海虹桥', '18:11', '次日 10:12', '16时1分', '[{"name":"软卧","price":571.5,"count":72},{"name":"硬卧","price":348.5,"count":18},{"name":"硬座","price":209,"count":416},{"name":"无座","price":209,"count":48}]'),
-('上海', '杭州', 'G7301', 'G', '高铁', '上海虹桥', '杭州东', '07:00', '07:45', '0时45分', '[{"name":"商务座","price":233,"count":34},{"name":"一等座","price":123.5,"count":4},{"name":"二等座","price":77.5,"count":297},{"name":"无座","price":77.5,"count":79}]'),
-('上海', '杭州', 'G7305', 'G', '高铁', '上海虹桥', '杭州东', '08:00', '08:46', '0时46分', '[{"name":"商务座","price":233,"count":31},{"name":"一等座","price":123.5,"count":66},{"name":"二等座","price":77.5,"count":297},{"name":"无座","price":77.5,"count":21}]'),
-('上海', '杭州', 'G7313', 'G', '高铁', '上海虹桥', '杭州东', '09:00', '09:46', '0时46分', '[{"name":"商务座","price":233,"count":73},{"name":"一等座","price":123.5,"count":32},{"name":"二等座","price":77.5,"count":197},{"name":"无座","price":77.5,"count":59}]'),
-('上海', '杭州', 'G7321', 'G', '高铁', '上海虹桥', '杭州东', '10:00', '10:46', '0时46分', '[{"name":"商务座","price":233,"count":77},{"name":"一等座","price":123.5,"count":29},{"name":"二等座","price":77.5,"count":252},{"name":"无座","price":77.5,"count":63}]'),
-('上海', '杭州', 'G7333', 'G', '高铁', '上海虹桥', '杭州东', '11:00', '11:46', '0时46分', '[{"name":"商务座","price":233,"count":1},{"name":"一等座","price":123.5,"count":55},{"name":"二等座","price":77.5,"count":194},{"name":"无座","price":77.5,"count":24}]'),
-('上海', '杭州', 'G7345', 'G', '高铁', '上海虹桥', '杭州东', '12:00', '12:46', '0时46分', '[{"name":"商务座","price":233,"count":32},{"name":"一等座","price":123.5,"count":64},{"name":"二等座","price":77.5,"count":92},{"name":"无座","price":77.5,"count":72}]'),
-('上海', '杭州', 'G7357', 'G', '高铁', '上海虹桥', '杭州东', '13:00', '13:46', '0时46分', '[{"name":"商务座","price":233,"count":21},{"name":"一等座","price":123.5,"count":16},{"name":"二等座","price":77.5,"count":189},{"name":"无座","price":77.5,"count":60}]'),
-('上海', '杭州', 'D3101', 'D', '动车', '上海虹桥', '杭州东', '07:15', '08:25', '1时10分', '[null,{"name":"一等座","price":62.5,"count":14},{"name":"二等座","price":52.5,"count":235},{"name":"无座","price":52.5,"count":16}]'),
+('上海', '杭州', 'G7301', 'G', '高铁', '上海虹桥', '杭州东', '07:00', '07:45', '0时45分', '[{"name":"商务座","price":230.5,"count":34},{"name":"一等座","price":123.5,"count":4},{"name":"二等座","price":73,"count":297},{"name":"无座","price":73,"count":79}]'),
+('上海', '杭州', 'G7305', 'G', '高铁', '上海虹桥', '杭州东', '08:00', '08:46', '0时46分', '[{"name":"商务座","price":230.5,"count":31},{"name":"一等座","price":123.5,"count":66},{"name":"二等座","price":73,"count":297},{"name":"无座","price":73,"count":21}]'),
+('上海', '杭州', 'G7313', 'G', '高铁', '上海虹桥', '杭州东', '09:00', '09:46', '0时46分', '[{"name":"商务座","price":230.5,"count":73},{"name":"一等座","price":123.5,"count":32},{"name":"二等座","price":73,"count":197},{"name":"无座","price":73,"count":59}]'),
+('上海', '杭州', 'G7321', 'G', '高铁', '上海虹桥', '杭州东', '10:00', '10:46', '0时46分', '[{"name":"商务座","price":230.5,"count":77},{"name":"一等座","price":123.5,"count":29},{"name":"二等座","price":73,"count":252},{"name":"无座","price":73,"count":63}]'),
+('上海', '杭州', 'G7333', 'G', '高铁', '上海虹桥', '杭州东', '11:00', '11:46', '0时46分', '[{"name":"商务座","price":230.5,"count":1},{"name":"一等座","price":123.5,"count":55},{"name":"二等座","price":73,"count":194},{"name":"无座","price":73,"count":24}]'),
+('上海', '杭州', 'G7345', 'G', '高铁', '上海虹桥', '杭州东', '12:00', '12:46', '0时46分', '[{"name":"商务座","price":230.5,"count":32},{"name":"一等座","price":123.5,"count":64},{"name":"二等座","price":73,"count":92},{"name":"无座","price":73,"count":72}]'),
+('上海', '杭州', 'G7357', 'G', '高铁', '上海虹桥', '杭州东', '13:00', '13:46', '0时46分', '[{"name":"商务座","price":230.5,"count":21},{"name":"一等座","price":123.5,"count":16},{"name":"二等座","price":73,"count":189},{"name":"无座","price":73,"count":60}]'),
+('上海', '杭州', 'D3101', 'D', '动车', '上海虹桥', '杭州东', '07:15', '08:25', '1时10分', '[null,{"name":"一等座","price":84,"count":14},{"name":"二等座","price":52.5,"count":235},{"name":"无座","price":52.5,"count":16}]'),
 ('上海', '杭州', 'K289', 'K', '快速', '上海虹桥', '杭州东', '08:35', '11:10', '2时35分', '[{"name":"软卧","price":69.5,"count":58},{"name":"硬卧","price":42.5,"count":34},{"name":"硬座","price":25.5,"count":372},{"name":"无座","price":25.5,"count":39}]'),
-('杭州', '上海', 'G7302', 'G', '高铁', '杭州东', '上海虹桥', '07:05', '07:50', '0时45分', '[{"name":"商务座","price":233,"count":44},{"name":"一等座","price":123.5,"count":38},{"name":"二等座","price":77.5,"count":180},{"name":"无座","price":77.5,"count":85}]'),
-('杭州', '上海', 'G7306', 'G', '高铁', '杭州东', '上海虹桥', '08:05', '08:51', '0时46分', '[{"name":"商务座","price":233,"count":20},{"name":"一等座","price":123.5,"count":49},{"name":"二等座","price":77.5,"count":209},{"name":"无座","price":77.5,"count":7}]'),
-('杭州', '上海', 'G7314', 'G', '高铁', '杭州东', '上海虹桥', '09:05', '09:51', '0时46分', '[{"name":"商务座","price":233,"count":35},{"name":"一等座","price":123.5,"count":54},{"name":"二等座","price":77.5,"count":228},{"name":"无座","price":77.5,"count":4}]'),
-('杭州', '上海', 'G7322', 'G', '高铁', '杭州东', '上海虹桥', '10:05', '10:51', '0时46分', '[{"name":"商务座","price":233,"count":86},{"name":"一等座","price":123.5,"count":6},{"name":"二等座","price":77.5,"count":216},{"name":"无座","price":77.5,"count":15}]'),
-('杭州', '上海', 'G7346', 'G', '高铁', '杭州东', '上海虹桥', '11:05', '11:51', '0时46分', '[{"name":"商务座","price":233,"count":43},{"name":"一等座","price":123.5,"count":22},{"name":"二等座","price":77.5,"count":323},{"name":"无座","price":77.5,"count":22}]'),
-('杭州', '上海', 'G7358', 'G', '高铁', '杭州东', '上海虹桥', '13:05', '13:51', '0时46分', '[{"name":"商务座","price":233,"count":39},{"name":"一等座","price":123.5,"count":26},{"name":"二等座","price":77.5,"count":344},{"name":"无座","price":77.5,"count":86}]'),
-('杭州', '上海', 'D3102', 'D', '动车', '杭州东', '上海虹桥', '08:10', '09:20', '1时10分', '[null,{"name":"一等座","price":62.5,"count":61},{"name":"二等座","price":52.5,"count":254},{"name":"无座","price":52.5,"count":64}]'),
+('杭州', '上海', 'G7302', 'G', '高铁', '杭州东', '上海虹桥', '07:05', '07:50', '0时45分', '[{"name":"商务座","price":230.5,"count":44},{"name":"一等座","price":123.5,"count":38},{"name":"二等座","price":73,"count":180},{"name":"无座","price":73,"count":85}]'),
+('杭州', '上海', 'G7306', 'G', '高铁', '杭州东', '上海虹桥', '08:05', '08:51', '0时46分', '[{"name":"商务座","price":230.5,"count":20},{"name":"一等座","price":123.5,"count":49},{"name":"二等座","price":73,"count":209},{"name":"无座","price":73,"count":7}]'),
+('杭州', '上海', 'G7314', 'G', '高铁', '杭州东', '上海虹桥', '09:05', '09:51', '0时46分', '[{"name":"商务座","price":230.5,"count":35},{"name":"一等座","price":123.5,"count":54},{"name":"二等座","price":73,"count":228},{"name":"无座","price":73,"count":4}]'),
+('杭州', '上海', 'G7322', 'G', '高铁', '杭州东', '上海虹桥', '10:05', '10:51', '0时46分', '[{"name":"商务座","price":230.5,"count":86},{"name":"一等座","price":123.5,"count":6},{"name":"二等座","price":73,"count":216},{"name":"无座","price":73,"count":15}]'),
+('杭州', '上海', 'G7346', 'G', '高铁', '杭州东', '上海虹桥', '11:05', '11:51', '0时46分', '[{"name":"商务座","price":230.5,"count":43},{"name":"一等座","price":123.5,"count":22},{"name":"二等座","price":73,"count":323},{"name":"无座","price":73,"count":22}]'),
+('杭州', '上海', 'G7358', 'G', '高铁', '杭州东', '上海虹桥', '13:05', '13:51', '0时46分', '[{"name":"商务座","price":230.5,"count":39},{"name":"一等座","price":123.5,"count":26},{"name":"二等座","price":73,"count":344},{"name":"无座","price":73,"count":86}]'),
+('杭州', '上海', 'D3102', 'D', '动车', '杭州东', '上海虹桥', '08:10', '09:20', '1时10分', '[null,{"name":"一等座","price":84,"count":61},{"name":"二等座","price":52.5,"count":254},{"name":"无座","price":52.5,"count":64}]'),
 ('杭州', '上海', 'K290', 'K', '快速', '杭州东', '上海虹桥', '10:40', '13:15', '2时35分', '[{"name":"软卧","price":69.5,"count":50},{"name":"硬卧","price":42.5,"count":1},{"name":"硬座","price":25.5,"count":494},{"name":"无座","price":25.5,"count":39}]'),
-('广州', '深圳', 'G6501', 'G', '高铁', '广州南', '深圳北', '06:35', '07:10', '0时35分', '[{"name":"商务座","price":203,"count":78},{"name":"一等座","price":107.5,"count":58},{"name":"二等座","price":67.5,"count":189},{"name":"无座","price":67.5,"count":25}]'),
-('广州', '深圳', 'G6503', 'G', '高铁', '广州南', '深圳北', '07:00', '07:35', '0时35分', '[{"name":"商务座","price":203,"count":60},{"name":"一等座","price":107.5,"count":44},{"name":"二等座","price":67.5,"count":220},{"name":"无座","price":67.5,"count":17}]'),
-('广州', '深圳', 'G6505', 'G', '高铁', '广州南', '深圳北', '07:35', '08:10', '0时35分', '[{"name":"商务座","price":203,"count":79},{"name":"一等座","price":107.5,"count":44},{"name":"二等座","price":67.5,"count":326},{"name":"无座","price":67.5,"count":57}]'),
-('广州', '深圳', 'G6513', 'G', '高铁', '广州南', '深圳北', '08:00', '08:36', '0时36分', '[{"name":"商务座","price":203,"count":85},{"name":"一等座","price":107.5,"count":89},{"name":"二等座","price":67.5,"count":223},{"name":"无座","price":67.5,"count":22}]'),
-('广州', '深圳', 'G6521', 'G', '高铁', '广州南', '深圳北', '09:00', '09:36', '0时36分', '[{"name":"商务座","price":203,"count":63},{"name":"一等座","price":107.5,"count":11},{"name":"二等座","price":67.5,"count":317},{"name":"无座","price":67.5,"count":40}]'),
-('广州', '深圳', 'G6533', 'G', '高铁', '广州南', '深圳北', '10:00', '10:36', '0时36分', '[{"name":"商务座","price":203,"count":10},{"name":"一等座","price":107.5,"count":52},{"name":"二等座","price":67.5,"count":191},{"name":"无座","price":67.5,"count":13}]'),
-('广州', '深圳', 'C7001', 'G', '高铁', '广州南', '深圳北', '11:00', '12:10', '1时10分', '[{"name":"商务座","price":203,"count":30},{"name":"一等座","price":107.5,"count":1},{"name":"二等座","price":67.5,"count":71},{"name":"无座","price":67.5,"count":12}]'),
-('广州', '深圳', 'D7521', 'D', '动车', '广州南', '深圳北', '08:30', '09:50', '1时20分', '[null,{"name":"一等座","price":54.5,"count":28},{"name":"二等座","price":45.5,"count":91},{"name":"无座","price":45.5,"count":37}]'),
-('深圳', '广州', 'G6502', 'G', '高铁', '深圳北', '广州南', '07:00', '07:36', '0时36分', '[{"name":"商务座","price":203,"count":29},{"name":"一等座","price":107.5,"count":53},{"name":"二等座","price":67.5,"count":213},{"name":"无座","price":67.5,"count":25}]'),
-('深圳', '广州', 'G6506', 'G', '高铁', '深圳北', '广州南', '08:00', '08:36', '0时36分', '[{"name":"商务座","price":203,"count":40},{"name":"一等座","price":107.5,"count":61},{"name":"二等座","price":67.5,"count":316},{"name":"无座","price":67.5,"count":32}]'),
-('深圳', '广州', 'G6514', 'G', '高铁', '深圳北', '广州南', '09:00', '09:36', '0时36分', '[{"name":"商务座","price":203,"count":24},{"name":"一等座","price":107.5,"count":25},{"name":"二等座","price":67.5,"count":123},{"name":"无座","price":67.5,"count":21}]'),
-('深圳', '广州', 'G6522', 'G', '高铁', '深圳北', '广州南', '10:00', '10:36', '0时36分', '[{"name":"商务座","price":203,"count":36},{"name":"一等座","price":107.5,"count":9},{"name":"二等座","price":67.5,"count":87},{"name":"无座","price":67.5,"count":87}]'),
-('深圳', '广州', 'C7002', 'G', '高铁', '深圳北', '广州南', '12:00', '13:10', '1时10分', '[{"name":"商务座","price":203,"count":6},{"name":"一等座","price":107.5,"count":86},{"name":"二等座","price":67.5,"count":378},{"name":"无座","price":67.5,"count":18}]'),
-('深圳', '广州', 'D7522', 'D', '动车', '深圳北', '广州南', '09:30', '10:50', '1时20分', '[null,{"name":"一等座","price":54.5,"count":21},{"name":"二等座","price":45.5,"count":81},{"name":"无座","price":45.5,"count":73}]');
+('广州', '深圳', 'G6501', 'G', '高铁', '广州南', '深圳北', '06:35', '07:10', '0时35分', '[{"name":"商务座","price":149.5,"count":78},{"name":"一等座","price":99.5,"count":58},{"name":"二等座","price":74.5,"count":189},{"name":"无座","price":74.5,"count":25}]'),
+('广州', '深圳', 'G6503', 'G', '高铁', '广州南', '深圳北', '07:00', '07:35', '0时35分', '[{"name":"商务座","price":149.5,"count":60},{"name":"一等座","price":99.5,"count":44},{"name":"二等座","price":74.5,"count":220},{"name":"无座","price":74.5,"count":17}]'),
+('广州', '深圳', 'G6505', 'G', '高铁', '广州南', '深圳北', '07:35', '08:10', '0时35分', '[{"name":"商务座","price":149.5,"count":79},{"name":"一等座","price":99.5,"count":44},{"name":"二等座","price":74.5,"count":326},{"name":"无座","price":74.5,"count":57}]'),
+('广州', '深圳', 'G6513', 'G', '高铁', '广州南', '深圳北', '08:00', '08:36', '0时36分', '[{"name":"商务座","price":149.5,"count":85},{"name":"一等座","price":99.5,"count":89},{"name":"二等座","price":74.5,"count":223},{"name":"无座","price":74.5,"count":22}]'),
+('广州', '深圳', 'G6521', 'G', '高铁', '广州南', '深圳北', '09:00', '09:36', '0时36分', '[{"name":"商务座","price":149.5,"count":63},{"name":"一等座","price":99.5,"count":11},{"name":"二等座","price":74.5,"count":317},{"name":"无座","price":74.5,"count":40}]'),
+('广州', '深圳', 'G6533', 'G', '高铁', '广州南', '深圳北', '10:00', '10:36', '0时36分', '[{"name":"商务座","price":149.5,"count":10},{"name":"一等座","price":99.5,"count":52},{"name":"二等座","price":74.5,"count":191},{"name":"无座","price":74.5,"count":13}]'),
+('广州', '深圳', 'C7001', 'G', '高铁', '广州南', '深圳北', '11:00', '12:10', '1时10分', '[{"name":"商务座","price":149.5,"count":30},{"name":"一等座","price":99.5,"count":1},{"name":"二等座","price":74.5,"count":71},{"name":"无座","price":74.5,"count":12}]'),
+('广州', '深圳', 'D7521', 'D', '动车', '广州南', '深圳北', '08:30', '09:50', '1时20分', '[null,{"name":"一等座","price":73,"count":28},{"name":"二等座","price":45.5,"count":91},{"name":"无座","price":45.5,"count":37}]'),
+('深圳', '广州', 'G6502', 'G', '高铁', '深圳北', '广州南', '07:00', '07:36', '0时36分', '[{"name":"商务座","price":149.5,"count":29},{"name":"一等座","price":99.5,"count":53},{"name":"二等座","price":74.5,"count":213},{"name":"无座","price":74.5,"count":25}]'),
+('深圳', '广州', 'G6506', 'G', '高铁', '深圳北', '广州南', '08:00', '08:36', '0时36分', '[{"name":"商务座","price":149.5,"count":40},{"name":"一等座","price":99.5,"count":61},{"name":"二等座","price":74.5,"count":316},{"name":"无座","price":74.5,"count":32}]'),
+('深圳', '广州', 'G6514', 'G', '高铁', '深圳北', '广州南', '09:00', '09:36', '0时36分', '[{"name":"商务座","price":149.5,"count":24},{"name":"一等座","price":99.5,"count":25},{"name":"二等座","price":74.5,"count":123},{"name":"无座","price":74.5,"count":21}]'),
+('深圳', '广州', 'G6522', 'G', '高铁', '深圳北', '广州南', '10:00', '10:36', '0时36分', '[{"name":"商务座","price":149.5,"count":36},{"name":"一等座","price":99.5,"count":9},{"name":"二等座","price":74.5,"count":87},{"name":"无座","price":74.5,"count":87}]'),
+('深圳', '广州', 'C7002', 'G', '高铁', '深圳北', '广州南', '12:00', '13:10', '1时10分', '[{"name":"商务座","price":149.5,"count":6},{"name":"一等座","price":99.5,"count":86},{"name":"二等座","price":74.5,"count":378},{"name":"无座","price":74.5,"count":18}]'),
+('深圳', '广州', 'D7522', 'D', '动车', '深圳北', '广州南', '09:30', '10:50', '1时20分', '[null,{"name":"一等座","price":73,"count":21},{"name":"二等座","price":45.5,"count":81},{"name":"无座","price":45.5,"count":73}]');
 
 -- 真实航班数据（航班号/航司/机型/时刻与官网口径一致，票价为折扣价）
 INSERT INTO flight(from_city,to_city,flight_no,airline,plane,from_airport,to_airport,dep_time,arr_time,duration,cabins) VALUES
@@ -434,4 +452,78 @@ CREATE TABLE IF NOT EXISTS ship_ticket (
   dep_time VARCHAR(8), from_port VARCHAR(48), to_port VARCHAR(48),
   duration VARCHAR(16), ship_name VARCHAR(40), seat_type VARCHAR(20), price INT NOT NULL, seats INT NOT NULL,
   KEY idx_ship_route (from_city, to_city)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- 2026-11-22 新增：悦途金融（拿去花授信分期 / 信用微贷 / 出行保障 / 钱包账单）
+-- 与 sql/migration-2026-11-22-finance.sql 同构，存量库执行迁移脚本即可
+CREATE TABLE IF NOT EXISTS fin_account (
+  user_id BIGINT PRIMARY KEY,
+  real_name VARCHAR(32), id_card VARCHAR(18),
+  income INT DEFAULT 0, job VARCHAR(32),
+  credit_status VARCHAR(16) NOT NULL DEFAULT 'none',
+  credit_limit DECIMAL(12,2) NOT NULL DEFAULT 0,
+  credit_used DECIMAL(12,2) NOT NULL DEFAULT 0,
+  credit_score INT NOT NULL DEFAULT 0,
+  wallet DECIMAL(12,2) NOT NULL DEFAULT 0,
+  create_time DATETIME DEFAULT CURRENT_TIMESTAMP,
+  update_time DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+CREATE TABLE IF NOT EXISTS fin_loan (
+  id BIGINT AUTO_INCREMENT PRIMARY KEY,
+  user_id BIGINT NOT NULL,
+  loan_no VARCHAR(32) NOT NULL UNIQUE,
+  kind VARCHAR(16) NOT NULL,
+  order_no VARCHAR(32), title VARCHAR(128),
+  principal DECIMAL(12,2) NOT NULL,
+  months INT NOT NULL, rate DECIMAL(5,2) NOT NULL,
+  monthly DECIMAL(12,2) NOT NULL,
+  paid_months INT NOT NULL DEFAULT 0,
+  status VARCHAR(16) NOT NULL DEFAULT '还款中',
+  create_time DATETIME DEFAULT CURRENT_TIMESTAMP,
+  KEY idx_loan_user (user_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+CREATE TABLE IF NOT EXISTS fin_repay (
+  id BIGINT AUTO_INCREMENT PRIMARY KEY,
+  loan_id BIGINT NOT NULL, seq INT NOT NULL,
+  due_date DATE NOT NULL,
+  amount DECIMAL(12,2) NOT NULL,
+  principal DECIMAL(12,2) NOT NULL,
+  interest DECIMAL(12,2) NOT NULL,
+  status VARCHAR(16) NOT NULL DEFAULT '待还',
+  paid_time DATETIME,
+  KEY idx_repay_loan (loan_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+CREATE TABLE IF NOT EXISTS fin_policy (
+  id BIGINT AUTO_INCREMENT PRIMARY KEY,
+  user_id BIGINT NOT NULL,
+  policy_no VARCHAR(32) NOT NULL UNIQUE,
+  plan VARCHAR(16) NOT NULL, plan_name VARCHAR(32) NOT NULL,
+  price DECIMAL(12,2) NOT NULL,
+  insured VARCHAR(32) NOT NULL, destination VARCHAR(32) NOT NULL,
+  start_date DATE NOT NULL, end_date DATE NOT NULL,
+  status VARCHAR(16) NOT NULL DEFAULT '保障中',
+  create_time DATETIME DEFAULT CURRENT_TIMESTAMP,
+  KEY idx_policy_user (user_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+CREATE TABLE IF NOT EXISTS fin_claim (
+  id BIGINT AUTO_INCREMENT PRIMARY KEY,
+  policy_id BIGINT NOT NULL, user_id BIGINT NOT NULL,
+  claim_no VARCHAR(32) NOT NULL UNIQUE,
+  type VARCHAR(16) NOT NULL,
+  amount DECIMAL(12,2) NOT NULL, payout DECIMAL(12,2) NOT NULL,
+  reason VARCHAR(255),
+  status VARCHAR(16) NOT NULL DEFAULT '审核中',
+  create_time DATETIME DEFAULT CURRENT_TIMESTAMP,
+  review_time DATETIME,
+  KEY idx_claim_user (user_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+CREATE TABLE IF NOT EXISTS fin_tx (
+  id BIGINT AUTO_INCREMENT PRIMARY KEY,
+  user_id BIGINT NOT NULL,
+  kind VARCHAR(16) NOT NULL,
+  amount DECIMAL(12,2) NOT NULL,
+  balance_after DECIMAL(12,2) NOT NULL,
+  memo VARCHAR(128), ref_no VARCHAR(32),
+  create_time DATETIME DEFAULT CURRENT_TIMESTAMP,
+  KEY idx_tx_user (user_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;

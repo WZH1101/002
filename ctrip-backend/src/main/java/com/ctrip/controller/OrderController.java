@@ -11,7 +11,7 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * 订单接口：下单（待支付）/ 支付 / 取消 / 退款 / 删除 / 批量取消。
+ * 订单接口：下单（待支付）/ 支付 / 取消 / 退款 / 改签 / 删除 / 批量取消。
  *
  * <p>写接口都需要登录，由 {@link com.ctrip.config.AuthInterceptor} 拦下 /api/orders/**，
  * 归属再按会话用户判定。改动前它们是匿名的：任何人都能读到全部订单的联系人姓名与手机号，
@@ -87,6 +87,35 @@ public class OrderController {
         if (user == null) return ApiResponse.unauthorized(EXPIRED);
         try {
             return ApiResponse.ok(service.refundOrder(orderNo, user.id()));
+        } catch (IllegalStateException e) {
+            return ApiResponse.fail(e.getMessage());
+        }
+    }
+
+    /**
+     * 改签：已支付的机票/火车票订单换成同航线的新日期/班次/舱位。
+     * 请求体只认 {itemId, choice, date}；手续费、差价、新单价与新标题全部由服务端重算。
+     */
+    @PostMapping("/{orderNo}/change")
+    public ApiResponse<Map<String, Object>> change(@PathVariable String orderNo,
+                                                  @RequestBody Map<String, Object> req,
+                                                  HttpServletRequest request) {
+        UserService.AuthUser user = currentUser(request);
+        if (user == null) return ApiResponse.unauthorized(EXPIRED);
+        try {
+            return ApiResponse.ok(service.changeOrder(orderNo, user.id(), req));
+        } catch (IllegalStateException e) {
+            return ApiResponse.fail(e.getMessage());
+        }
+    }
+
+    /** 改签历史：订单详情/改签弹窗展示「第几次、从哪改到哪、收了多少手续费」 */
+    @GetMapping("/{orderNo}/changes")
+    public ApiResponse<List<Map<String, Object>>> changes(@PathVariable String orderNo, HttpServletRequest request) {
+        UserService.AuthUser user = currentUser(request);
+        if (user == null) return ApiResponse.unauthorized(EXPIRED);
+        try {
+            return ApiResponse.ok(service.listChanges(orderNo, user.id()));
         } catch (IllegalStateException e) {
             return ApiResponse.fail(e.getMessage());
         }

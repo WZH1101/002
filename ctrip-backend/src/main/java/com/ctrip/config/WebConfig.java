@@ -55,7 +55,8 @@ public class WebConfig implements WebMvcConfigurer {
     @Override
     public void addInterceptors(InterceptorRegistry registry) {
         registry.addInterceptor(authInterceptor)
-                .addPathPatterns("/api/orders/**", "/api/biztravel");
+                .addPathPatterns("/api/orders/**", "/api/biztravel", "/api/finance/**");
         // 说明：/api/biztravel 的 GET 是无个人信息的状态查询，由拦截器按方法放行，仅 POST 写入要求登录
+        // /api/finance/** 全部涉及本人资金与授信，读写一律要求登录
     }
 }

@@ -56,7 +56,7 @@ public class ProductService {
 
     /** 景点门票搜索 */
     public List<Map<String, Object>> searchAttractions(String city, String keyword) {
-        ensureAttractions(city);
+        // 景点仅返回预置官网价数据；无预置城市由前端回退本地官网价预置/生成，不在后端随机造票
         List<Map<String, Object>> list = query(
                 "SELECT * FROM attraction WHERE city = ? ORDER BY base_price DESC", city);
         List<Map<String, Object>> out = new ArrayList<>();
@@ -458,21 +458,6 @@ public class ProductService {
         }
     }
 
-    private void ensureAttractions(String city) {
-        Integer cnt = jdbc.queryForObject("SELECT COUNT(*) FROM attraction WHERE city = ?", Integer.class, city);
-        if (cnt != null && cnt > 0) return;
-        String[] suffixes = {"古城", "海洋公园", "博物馆", "欢乐世界", "森林公园", "动物园"};
-        String[] areas = {"市中心", "东郊", "西郊", "滨湖新区", "城南"};
-        ThreadLocalRandom rnd = ThreadLocalRandom.current();
-        for (int i = 0; i < 6; i++) {
-            int price = round(rnd.nextInt(30, 200) / 5.0) * 5;
-            insertAttraction(city, city + suffixes[i % suffixes.length],
-                    i % 2 == 0 ? "5A景区" : "4A景区", fmtScore(rnd, 4.0, 4.9),
-                    "08:30-17:30", areas[i % 5], List.of("亲子出游", "网红打卡", "快速入园").subList(0, 2),
-                    price, buildTicketTypes(price));
-        }
-    }
-
     /** 按 12306 规律生成一条线路的车次并入库（G/D/Z/T/K 号段、平均旅速与真实一致） */
     private void generateTrainsToDb(String from, String to) {
         int dist = Lookup.distance(from, to);
@@ -488,19 +473,13 @@ public class ProductService {
                 case "T" -> "T" + rnd.nextInt(1, 299);
                 default -> "K" + rnd.nextInt(100, 1300);
             };
-            int speed = switch (type) {
-                case "G" -> 255;
-                case "D" -> 165;
-                case "Z" -> 105;
-                default -> 78;
-            };
-            int durMin = (int) Math.round(dist / (double) speed * 60);
+            int durMin = Lookup.trainMinutes(dist, type, from, to, rnd.nextDouble());
             int depMin = 6 * 60 + rnd.nextInt(17 * 60);
             int arrTotal = depMin + durMin;
-            boolean nextDay = arrTotal >= 1440;
+            int dayOffset = arrTotal / 1440;
             String dep = fmtHm(depMin);
-            String arr = (nextDay ? "次日 " : "") + fmtHm(arrTotal % 1440);
-            Map<String, Double> prices = calcPrices(type, dist, false, null);
+            String arr = dayTag(dayOffset) + fmtHm(arrTotal % 1440);
+            Map<String, Double> prices = calcPrices(type, dist, false, from + "-" + to);
             List<Map<String, Object>> seats = buildSeats(type, prices, false, rnd);
             insertTrain(from, to, trainNo, type, dep, arr, durText(durMin), seats);
         }
@@ -514,7 +493,7 @@ public class ProductService {
         ThreadLocalRandom rnd = ThreadLocalRandom.current();
         int rail = Lookup.distance(from, to);
         int dist = (int) Math.round(rail * 0.85);
-        int durMin = (int) Math.round(dist / 780.0 * 60);
+        int durMin = Lookup.flightMinutes(dist);
         int count = rnd.nextInt(6, 10);
         Integer fullFare = Lookup.FULL_FARES.get(from + "-" + to);
         for (int i = 0; i < count; i++) {
@@ -522,18 +501,23 @@ public class ProductService {
             String plane = planes[rnd.nextInt(planes.length)];
             int depMin = 6 * 60 + rnd.nextInt(15 * 60);
             int arrTotal = depMin + durMin;
-            boolean nextDay = arrTotal >= 1440;
             List<Map<String, Object>> cabins = buildCabins(
-                    fullFare != null ? fullFare : 60 + (int) Math.round(dist * 1.2), plane, rnd);
+                    fullFare != null ? fullFare : (int) Math.round((dist * 1.25 + 150) / 10.0) * 10, plane, rnd);
             insertFlight(from, to, al[0] + rnd.nextInt(1000, 9000), al[1], plane,
-                    fmtHm(depMin), (nextDay ? "次日 " : "") + fmtHm(arrTotal % 1440), durText(durMin), cabins);
+                    fmtHm(depMin), dayTag(arrTotal / 1440) + fmtHm(arrTotal % 1440), durText(durMin), cabins);
         }
     }
 
-    /** 按客运规律生成班次并入库（0.3元/公里、均速80km/h、06:30起40-90分钟一班） */
+    /** 到达日标签：与官网一致，跨一天显示「次日 」、两天以上显示「第 N 日 」 */
+    private static String dayTag(int dayOffset) {
+        return dayOffset >= 2 ? "第" + (dayOffset + 1) + "日 " : dayOffset == 1 ? "次日 " : "";
+    }
+
+    /** 按客运规律生成班次并入库（干线公布价锚点/其余 0.33 元公里、均速80km/h、06:30起40-90分钟一班） */
     private void generateBusesToDb(String from, String to) {
         int dist = (int) Math.round(Lookup.distance(from, to) * 1.15);
-        int price = Math.max(20, (int) Math.round(dist * 0.3 / 5.0) * 5);
+        Integer anchor = Lookup.BUS_FARE_ANCHORS.get(from + "-" + to);
+        int price = anchor != null ? anchor : Math.max(20, (int) Math.round(dist * 0.33 / 5.0) * 5);
         int durMin = (int) Math.round(dist / 80.0 * 60);
         String[] busTypes = {"大型高一", "大型高二", "中型中级"};
         ThreadLocalRandom rnd = ThreadLocalRandom.current();
@@ -549,10 +533,11 @@ public class ProductService {
 
     // ==================== 12306 / 民航 定价（与前端算法一致） ====================
 
-    /** 分段递远递减：200km内全价，之后 9/8/7/6/5 折 */
-    static double calcFare(double dist, double baseRate) {
+    /** 分段递远递减：高铁递减平缓（95/9/85/8/75 折），普速递减陡（9/8/7/6/5 折） */
+    static double calcFare(double dist, double baseRate, boolean highspeed) {
         double[] caps = {200, 300, 500, 500, 500, Double.MAX_VALUE};
-        double[] discs = {1, 0.9, 0.8, 0.7, 0.6, 0.5};
+        double[] discs = highspeed ? new double[]{1, 0.95, 0.9, 0.85, 0.8, 0.75}
+                : new double[]{1, 0.9, 0.8, 0.7, 0.6, 0.5};
         double remain = dist, fare = 0;
         for (int i = 0; i < caps.length && remain > 0; i++) {
             double d = Math.min(remain, caps[i]);
@@ -562,32 +547,59 @@ public class ProductService {
         return Math.round(fare * 2) / 2.0;
     }
 
-    /** key: business/first/second/softSleeper/hardSleeper/hardSeat/none；京沪高铁特判与官网一致 */
-    static Map<String, Double> calcPrices(String type, int dist, boolean flagship, String trainNo) {
+    /** key: business/first/second/softSleeper/hardSleeper/hardSeat/none；费率与席别比例按 12306 公布价校准 */
+    static Map<String, Double> calcPrices(String type, int dist, boolean flagship, String key) {
         Map<String, Double> p = new HashMap<>();
         if ("G".equals(type)) {
+            Double anchor = key == null ? null : Lookup.TRAIN_FARE_ANCHORS.get(key);
             if (dist == 1318) {
                 p.put("business", 1748.0);
                 p.put("first", flagship ? 1061.0 : 933.0);
                 p.put("second", flagship ? 662.0 : 553.0);
+            } else if (anchor != null) {
+                p.put("second", anchor);
+                if ("广州-深圳".equals(key) || "深圳-广州".equals(key)) {
+                    p.put("first", 99.5);
+                    p.put("business", 149.5);
+                } else {
+                    p.put("first", half(anchor * 1.69));
+                    p.put("business", half(anchor * 3.16));
+                }
             } else {
-                p.put("second", calcFare(dist, 0.46));
-                p.put("first", calcFare(dist, 0.73));
-                p.put("business", calcFare(dist, 1.38));
+                double second = calcFare(dist, 0.475, true);
+                p.put("second", second);
+                p.put("first", half(second * 1.69));
+                p.put("business", half(second * 3.16));
             }
             p.put("none", p.get("second"));
         } else if ("D".equals(type)) {
-            p.put("second", calcFare(dist, 0.31));
-            p.put("first", calcFare(dist, 0.37));
-            p.put("softSleeper", calcFare(dist, 0.61));
+            if (dist == 1318) {
+                p.put("second", 338.5);
+                p.put("softSleeper", 666.5);
+            } else {
+                p.put("second", calcFare(dist, 0.31, true));
+                p.put("softSleeper", half(p.get("second") * 2.1));
+            }
+            p.put("first", half(p.get("second") * 1.6));
             p.put("none", p.get("second"));
         } else {
-            p.put("hardSeat", calcFare(dist, 0.15));
-            p.put("hardSleeper", calcFare(dist, 0.25));
-            p.put("softSleeper", calcFare(dist, 0.41));
+            if (dist == 1318) {
+                p.put("hardSeat", 156.5);
+                p.put("hardSleeper", 296.5);
+                p.put("softSleeper", 455.5);
+            } else {
+                p.put("hardSeat", calcFare(dist, 0.15, false));
+                p.put("hardSleeper", calcFare(dist, 0.25, false));
+                p.put("softSleeper", calcFare(dist, 0.41, false));
+            }
             p.put("none", p.get("hardSeat"));
         }
         return p;
+    }
+
+    /** 取整到 0.5 元（12306 票价尾数规律） */
+    static double half(double v) {
+        return Math.round(v * 2) / 2.0;
     }
 
     /** 座位数组（4列对齐，null 占位；动卧为 软卧/null/二等座/无座） */
@@ -623,7 +635,7 @@ public class ProductService {
     }
 
     List<Map<String, Object>> buildCabins(int fullFare, String plane, ThreadLocalRandom rnd) {
-        double discount = 0.35 + rnd.nextDouble() * 0.45; // 经济舱 3.5-8 折
+        double discount = 0.28 + rnd.nextDouble() * 0.55; // 经济舱 2.8-8.3 折（官网常见折扣区间）
         int eco = (int) Math.round(fullFare * discount / 10.0) * 10;
         boolean hasFirst = plane.startsWith("A330") || plane.startsWith("A350")
                 || plane.startsWith("B777") || plane.startsWith("B787");
