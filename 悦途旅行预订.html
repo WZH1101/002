@@ -2666,7 +2666,7 @@
         /* ==================== 动效层 B：顶栏 / Hero ==================== */
         .top-nav { transition: box-shadow .3s ease, background .3s ease; }
         .top-nav .container { transition: height .28s ease; }
-        .top-nav.is-scrolled { box-shadow: 0 6px 20px rgba(37,119,227,.14); background: rgba(255,255,255,.93); }
+        .top-nav.is-scrolled { box-shadow: 0 6px 20px rgba(37,119,227,.14); background: #fff; }
         .top-nav.is-scrolled .container { height: 52px; }
         .nav-logo i { transition: transform .5s cubic-bezier(.34,1.56,.64,1); }
         .nav-logo:hover i { transform: rotate(-18deg) scale(1.12); }
@@ -2813,6 +2813,212 @@
         .hd-login-low:hover { background: #1a5fc4; }
         .hd-mask { color: #2577e3; font-weight: 800; }
         @media (max-width: 1080px) { .hd-layout { grid-template-columns: 1fr; } .hd-rooms { position: static; } }
+
+        /* ==================== 携程式预订控件：城市选择 / 日历 / 房间住客 / 历史 / 筛选栏 ==================== */
+        .form-group { position: relative; }
+        .fg-range { flex: 1.7; min-width: 250px; }
+        .fg-room { flex: 1.1; min-width: 170px; }
+        .cp-wrap { position: relative; }
+        .cp-field {
+            display: flex; align-items: center; gap: 8px; width: 100%;
+            padding: 8px 12px; min-height: 52px; border: 1px solid #ddd; border-radius: 6px;
+            background: #fafbfc; cursor: pointer; transition: border-color .25s, box-shadow .25s, background .25s;
+        }
+        .cp-field:hover { border-color: #9cc0ee; background: #fff; }
+        .cp-field.on { border-color: #2577e3; background: #fff; box-shadow: 0 0 0 3px rgba(37,119,227,.12); }
+        .cp-ico { color: #2577e3; font-size: 14px; flex: none; }
+        .cp-val { flex: 1; min-width: 0; font-size: 14px; font-weight: 600; color: #1f2733; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .cp-val.ph { color: #9aa4b2; font-weight: 400; }
+        .cp-caret { color: #8894a6; font-size: 12px; flex: none; transition: transform .25s; }
+        .cp-field.on .cp-caret { transform: rotate(180deg); color: #2577e3; }
+        .cal-week { font-style: normal; font-size: 12px; color: #2577e3; background: #eef5ff; border-radius: 10px; padding: 2px 8px; flex: none; }
+        /* 日期字段两行式（携程式）：日期在上、今天/周X 在下，窄卡里不会截断 */
+        .cal-part { flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: flex-start; line-height: 1.3; }
+        .cal-part b { font-size: 14px; font-weight: 600; color: #1f2733; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+        .cal-part b.ph { color: #9aa4b2; font-weight: 400; }
+        .cal-part em { font-style: normal; font-size: 11px; color: #2577e3; }
+        /* 表单控件统一 52px 高：关键词输入框与搜索按钮跟选择器字段对齐 */
+        .search-form .form-group > input { padding: 15px 12px; }
+        .search-form .search-btn { padding: 15px 40px; }
+        .picker-panel {
+            position: absolute; top: calc(100% + 6px); left: 0; z-index: 80;
+            background: #fff; border: 1px solid #e3eaf5; border-radius: 10px;
+            box-shadow: 0 12px 40px rgba(15,45,90,.18); animation: fadeUp .18s ease both;
+        }
+        .fg-date .picker-panel { left: auto; right: 0; }
+
+        /* 城市选择面板 */
+        .cp-panel { width: 390px; max-width: calc(100vw - 40px); padding: 12px; }
+        .cp-search { display: flex; align-items: center; gap: 8px; border: 1px solid #dfe7f2; border-radius: 6px; padding: 8px 10px; background: #f7fafd; }
+        .cp-search:focus-within { border-color: #2577e3; background: #fff; }
+        .cp-search i { color: #8894a6; font-size: 13px; }
+        .cp-search input, .cp-search input:focus { flex: 1; width: auto; border: none; outline: none; padding: 0; background: transparent; font-size: 13px; color: #1f2733; }
+        .cp-tabs { display: flex; flex-wrap: wrap; gap: 4px; margin: 10px 0 8px; }
+        .cp-tabs span { padding: 3px 9px; font-size: 12px; color: #556; border-radius: 4px; cursor: pointer; transition: background .2s, color .2s; }
+        .cp-tabs span:hover { background: #eef5ff; color: #2577e3; }
+        .cp-tabs span.on { background: #2577e3; color: #fff; font-weight: 600; }
+        .cp-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; max-height: 236px; overflow-y: auto; padding-right: 2px; }
+        .cp-grid::-webkit-scrollbar, .cp-matches::-webkit-scrollbar { width: 6px; }
+        .cp-grid::-webkit-scrollbar-track, .cp-matches::-webkit-scrollbar-track { background: #f2f6fc; border-radius: 3px; }
+        .cp-grid::-webkit-scrollbar-thumb, .cp-matches::-webkit-scrollbar-thumb { background: #c6d8f2; border-radius: 3px; }
+        .cp-grid::-webkit-scrollbar-thumb:hover, .cp-matches::-webkit-scrollbar-thumb:hover { background: #9cc0ee; }
+        .cp-city { padding: 7px 4px; text-align: center; font-size: 13px; color: #33475b; background: #fafcff; border: 1px solid #e6ecf5; border-radius: 6px; cursor: pointer; transition: all .18s; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .cp-city:hover { border-color: #2577e3; color: #2577e3; background: #eef5ff; }
+        .cp-city.on { background: #eef5ff; border-color: #2577e3; color: #2577e3; font-weight: 700; }
+        .cp-matches { max-height: 260px; overflow-y: auto; margin-top: 8px; }
+        .cp-match { display: flex; align-items: center; gap: 8px; padding: 8px 8px; border-radius: 6px; cursor: pointer; font-size: 13px; }
+        .cp-match:hover { background: #eef5ff; }
+        .cp-match i { color: #2577e3; font-size: 12px; }
+        .cp-match b { color: #1f2733; }
+        .cp-match span { color: #99a4b2; font-size: 12px; }
+        .cp-none { display: block; padding: 16px 6px; font-size: 13px; color: #99a4b2; text-align: center; grid-column: 1 / -1; }
+
+        /* 日历面板（单日历与范围日历共用） */
+        .cal-panel { width: 560px; max-width: calc(100vw - 40px); padding: 14px 16px 12px; }
+        .cal-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+        .cal-nav { width: 28px; height: 28px; display: flex; align-items: center; justify-content: center; border-radius: 50%; color: #2577e3; cursor: pointer; transition: background .2s; font-size: 12px; }
+        .cal-nav:hover { background: #eef5ff; }
+        .cal-quick { display: flex; gap: 6px; }
+        .cal-quick span { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; color: #33475b; border: 1px solid #dfe7f2; border-radius: 14px; padding: 4px 11px; cursor: pointer; transition: all .18s; }
+        .cal-quick span em { font-style: normal; color: #99a4b2; font-size: 11px; }
+        .cal-quick span:hover { border-color: #2577e3; color: #2577e3; }
+        .cal-quick span.on { background: #2577e3; border-color: #2577e3; color: #fff; }
+        .cal-quick span.on em { color: rgba(255,255,255,.8); }
+        .cal-range-tip { font-size: 13px; font-weight: 600; color: #1f2733; }
+        .cal-range-tip em { font-style: normal; font-weight: 400; font-size: 12px; color: #2577e3; }
+        .cal-months { display: flex; gap: 20px; }
+        .cal-month { flex: 1; min-width: 0; }
+        .cal-mtitle { text-align: center; font-size: 14px; font-weight: 700; color: #1f2733; margin-bottom: 6px; }
+        .cal-wk { display: grid; grid-template-columns: repeat(7, 1fr); margin-bottom: 2px; }
+        .cal-wk span { text-align: center; font-size: 12px; color: #8894a6; padding: 4px 0; }
+        .cal-wk span.wk { color: #ff7d00; }
+        .cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px 0; }
+        .cal-day { height: 44px; display: flex; flex-direction: column; align-items: center; justify-content: center; border-radius: 6px; cursor: pointer; transition: background .15s; }
+        .cal-day b { font-size: 14px; font-weight: 600; color: #1f2733; line-height: 1.2; }
+        .cal-day i { font-style: normal; font-size: 10px; color: #99a4b2; line-height: 1.2; }
+        .cal-day.wk b { color: #ff7d00; }
+        .cal-day:not(.off):not(.blank):hover { background: #eef5ff; }
+        .cal-day.blank { cursor: default; }
+        .cal-day.off { cursor: default; }
+        .cal-day.off b, .cal-day.off i { color: #c5ccd6; font-weight: 400; }
+        .cal-day.in-range { background: #eef5ff; border-radius: 0; }
+        .cal-day.on, .cal-day.on-start, .cal-day.on-end { background: #2577e3; }
+        .cal-day.on b, .cal-day.on i, .cal-day.on-start b, .cal-day.on-start i, .cal-day.on-end b, .cal-day.on-end i { color: #fff; }
+        .cal-day.on-start { border-radius: 6px 0 0 6px; }
+        .cal-day.on-end { border-radius: 0 6px 6px 0; }
+        .cal-day.on-start.on-end { border-radius: 6px; }
+        .cal-hint { margin-top: 8px; padding-top: 8px; border-top: 1px dashed #e3eaf5; font-size: 12px; color: #99a4b2; }
+        .cal-hint i { color: #2577e3; margin-right: 4px; }
+        .cr-field { gap: 10px; }
+        .cr-part { flex: 1; min-width: 0; display: flex; align-items: baseline; gap: 6px; }
+        .cr-part b { font-size: 14px; color: #1f2733; white-space: nowrap; }
+        .cr-part b.ph { color: #9aa4b2; font-weight: 400; }
+        .cr-part em { font-style: normal; font-size: 12px; color: #8894a6; white-space: nowrap; }
+        .cr-nights { flex: none; font-size: 12px; color: #2577e3; background: #eef5ff; border-radius: 10px; padding: 2px 9px; }
+
+        /* 房间及住客面板 */
+        .rm-panel { width: 300px; max-width: calc(100vw - 40px); padding: 12px 16px 14px; }
+        .rm-row { display: flex; align-items: center; justify-content: space-between; padding: 9px 0; }
+        .rm-name b { display: block; font-size: 14px; color: #1f2733; }
+        .rm-name em { font-style: normal; font-size: 11px; color: #99a4b2; }
+        .rm-step { display: flex; align-items: center; gap: 4px; }
+        .rm-step button { width: 27px; height: 27px; border-radius: 50%; border: 1px solid #c9dcf6; background: #fff; color: #2577e3; cursor: pointer; font-size: 11px; transition: all .18s; display: flex; align-items: center; justify-content: center; }
+        .rm-step button:hover:not(:disabled) { background: #eef5ff; border-color: #2577e3; }
+        .rm-step button:disabled { opacity: .35; cursor: default; }
+        .rm-num { width: 36px; text-align: center; font-size: 15px; font-weight: 700; color: #1f2733; font-variant-numeric: tabular-nums; }
+        .rm-done { width: 100%; margin-top: 8px; padding: 8px 0; border: none; border-radius: 6px; background: #2577e3; color: #fff; font-size: 13px; font-weight: 600; cursor: pointer; transition: background .2s; }
+        .rm-done:hover { background: #1a5fc4; }
+
+        /* 出发/到达交换按钮 */
+        .swap-wrap { display: flex; align-items: flex-end; padding-bottom: 9px; flex: none; }
+        .swap-btn { width: 34px; height: 34px; border-radius: 50%; border: 1px solid #c9dcf6; background: #fff; color: #2577e3; cursor: pointer; font-size: 13px; transition: all .2s; display: flex; align-items: center; justify-content: center; }
+        .swap-btn:hover { background: #eef5ff; border-color: #2577e3; box-shadow: 0 3px 10px rgba(37,119,227,.18); }
+        .swap-btn.spin i { animation: swapSpin .45s ease; }
+        @keyframes swapSpin { to { transform: rotate(180deg); } }
+
+        /* 最近搜索 */
+        .search-history { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin-top: 16px; padding-top: 12px; border-top: 1px dashed #e3eaf5; }
+        .sh-label { font-size: 12px; color: #8894a6; flex: none; }
+        .sh-label i { color: #2577e3; margin-right: 3px; }
+        .sh-chip { font-size: 12px; color: #445; background: #f2f6fc; border: 1px solid #e2eaf6; border-radius: 14px; padding: 4px 12px; cursor: pointer; max-width: 300px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; transition: all .18s; }
+        .sh-chip:hover { border-color: #2577e3; color: #2577e3; background: #eef5ff; }
+        .sh-clear { margin-left: auto; font-size: 12px; color: #99a4b2; cursor: pointer; flex: none; transition: color .18s; }
+        .sh-clear:hover { color: #ff4d4f; }
+
+        /* 结果排序筛选栏 */
+        .result-toolbar { background: #fff; border-radius: 10px; padding: 10px 14px; margin: 0 0 14px; box-shadow: 0 2px 8px rgba(0,0,0,.05); display: flex; flex-direction: column; gap: 7px; }
+        .rt-row { display: flex; align-items: center; flex-wrap: wrap; gap: 5px; }
+        .rt-cap { font-size: 12px; color: #8894a6; margin-right: 3px; flex: none; }
+        .rt-gap { margin-left: 16px; }
+        .rt-chip { font-size: 13px; color: #445; padding: 4px 12px; border-radius: 14px; border: 1px solid transparent; cursor: pointer; transition: all .18s; white-space: nowrap; }
+        .rt-chip:hover { background: #f2f6fc; color: #2577e3; }
+        .rt-chip.on { color: #2577e3; background: #eef5ff; border-color: #bcd6f7; font-weight: 600; }
+        .rt-chip i { margin-right: 4px; font-size: 12px; }
+        .rt-clear { margin-left: auto; font-size: 12px; color: #2577e3; cursor: pointer; flex: none; }
+        .rt-clear:hover { text-decoration: underline; }
+        .filter-empty { background: #fff; border-radius: 12px; padding: 42px 20px; text-align: center; box-shadow: 0 2px 8px rgba(0,0,0,.05); }
+        .filter-empty i { font-size: 34px; color: #c9dcf6; }
+        .filter-empty p { margin: 12px 0 16px; font-size: 14px; color: #8894a6; }
+
+        /* 火车票/机票日期切换条 */
+        .date-strip { display: flex; align-items: center; gap: 8px; background: #fff; border-radius: 10px; padding: 8px 10px; margin: 0 0 14px; box-shadow: 0 2px 8px rgba(0,0,0,.05); }
+        .ds-arrow { font-size: 12px; color: #2577e3; cursor: pointer; padding: 6px 8px; border-radius: 6px; white-space: nowrap; flex: none; transition: background .18s; }
+        .ds-arrow:hover { background: #eef5ff; }
+        .ds-arrow.off { color: #c5ccd6; pointer-events: none; }
+        .ds-days { flex: 1; display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; }
+        .ds-day { display: flex; flex-direction: column; align-items: center; padding: 5px 2px; border-radius: 6px; cursor: pointer; transition: background .15s; }
+        .ds-day b { font-size: 13px; color: #1f2733; font-variant-numeric: tabular-nums; }
+        .ds-day em { font-style: normal; font-size: 11px; color: #8894a6; }
+        .ds-day:hover { background: #f2f6fc; }
+        .ds-day.on { background: #2577e3; }
+        .ds-day.on b, .ds-day.on em { color: #fff; }
+
+        /* 吸顶精简搜索条：结果页滚过搜索卡后 sticky 在顶栏下方 */
+        .mini-search { position: sticky; top: 52px; z-index: 95; display: flex; align-items: center; gap: 12px; background: #fff; border-radius: 10px; padding: 8px 14px; margin: 0 0 14px; box-shadow: 0 4px 16px rgba(31,39,51,.12); animation: msIn .22s ease; }
+        @keyframes msIn { from { opacity: 0; transform: translateY(-8px); } to { opacity: 1; transform: none; } }
+        .ms-ico { width: 34px; height: 34px; border-radius: 8px; background: linear-gradient(135deg, #2577e3, #4a9bf5); color: #fff; display: flex; align-items: center; justify-content: center; font-size: 15px; flex: none; }
+        .ms-main { flex: 1; min-width: 0; display: flex; align-items: baseline; gap: 10px; cursor: pointer; }
+        .ms-main b { font-size: 14px; color: #1f2733; white-space: nowrap; }
+        .ms-main em { font-style: normal; font-size: 12px; color: #8894a6; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .ms-main:hover b { color: #2577e3; }
+        .ms-count { font-size: 12px; color: #2577e3; background: #eef5ff; border-radius: 20px; padding: 3px 10px; flex: none; }
+        .ms-btn { flex: none; border: none; background: #2577e3; color: #fff; font-size: 13px; border-radius: 20px; padding: 7px 16px; cursor: pointer; transition: background .18s; }
+        .ms-btn:hover { background: #1a66cc; }
+        .ms-btn i { margin-right: 5px; font-size: 11px; }
+
+        /* 酒店关键词联想下拉 */
+        .kw-wrap { position: relative; }
+        .kw-panel { width: 100%; min-width: 240px; max-height: 288px; overflow-y: auto; padding: 6px; }
+        .kw-panel::-webkit-scrollbar { width: 6px; }
+        .kw-panel::-webkit-scrollbar-thumb { background: #cfd8e3; border-radius: 3px; }
+        .kw-panel::-webkit-scrollbar-thumb:hover { background: #aebccb; }
+        .kw-item { display: flex; align-items: center; gap: 9px; padding: 8px 10px; border-radius: 7px; cursor: pointer; }
+        .kw-item:hover { background: #f2f6fc; }
+        .kw-item i { color: #2577e3; font-size: 13px; width: 16px; text-align: center; flex: none; }
+        .kw-item b { flex: 1; min-width: 0; font-size: 13px; font-weight: 500; color: #1f2733; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .kw-item em { font-style: normal; font-size: 11px; color: #9aa4b2; flex: none; }
+        .search-btn:disabled { opacity: .75; cursor: wait; }
+
+        @media (max-width: 768px) {
+            .cal-panel { width: 322px; padding: 12px; }
+            .cal-months .cal-month:last-child { display: none; }
+            .cp-panel { width: 322px; }
+            .fg-range, .fg-room { min-width: 100%; }
+            .swap-wrap { align-self: center; padding: 0; }
+            .swap-btn i { transform: rotate(90deg); }
+            .swap-btn.spin i { animation: none; }
+            .ds-arrow { font-size: 0; padding: 6px 4px; }
+            .ds-arrow i { font-size: 12px; }
+            .ds-day em { display: none; }
+            .mini-search { padding: 7px 10px; gap: 8px; }
+            .ms-main { flex-direction: column; align-items: flex-start; gap: 2px; }
+            .ms-main em { max-width: 52vw; }
+            .ms-count { display: none; }
+            .ms-btn { padding: 6px 12px; }
+            .sh-clear { margin-left: 0; }
+            .rt-gap { margin-left: 4px; }
+            .fg-date .picker-panel { right: auto; left: 0; }
+        }
 
         /* 尊重系统“减弱动效”设置 */
         @media (prefers-reduced-motion: reduce) {
@@ -3257,7 +3463,7 @@
 
                 <!-- ========== 常规模块视图（五大主模块 + 旅游/用车/全球购/礼品卡） ========== -->
                 <div v-show="!moduleView">
-            <div class="search-card" v-show="searchTab !== 'shop' && searchTab !== 'gift'">
+            <div class="search-card" ref="searchCard" v-show="searchTab !== 'shop' && searchTab !== 'gift'">
                 <!-- 一页只做一个模块：卡头只说清当前是哪个模块的预订，切模块走左侧栏 -->
                 <div class="sf-head" :key="searchTab" v-if="moduleHead">
                     <div class="sfh-ico"><i class="fas" :class="moduleHead.icon"></i></div>
@@ -3270,62 +3476,74 @@
 
                 <!-- 酒店搜索 -->
                 <div class="search-form" v-if="searchTab === 'hotel'">
-                    <div class="form-group">
+                    <div class="form-group fg-city">
                         <label>目的地</label>
-                        <input type="text" v-model="hotelForm.city" placeholder="城市 / 目的地" list="city-list">
+                        <city-picker v-model="hotelForm.city" :options="cities" placeholder="城市 / 目的地"></city-picker>
                     </div>
-                    <div class="form-group">
-                        <label>入住日期</label>
-                        <input type="date" v-model="hotelForm.checkIn" :min="today">
+                    <div class="form-group fg-range">
+                        <label>入住 / 离店</label>
+                        <cal-range :start.sync="hotelForm.checkIn" :end.sync="hotelForm.checkOut" :min="today()"></cal-range>
                     </div>
-                    <div class="form-group">
-                        <label>离店日期</label>
-                        <input type="date" v-model="hotelForm.checkOut" :min="hotelForm.checkIn || today">
+                    <div class="form-group fg-room">
+                        <label>房间及住客</label>
+                        <room-picker :rooms.sync="hotelForm.rooms" :adults.sync="hotelForm.adults" :children.sync="hotelForm.children"></room-picker>
                     </div>
                     <div class="form-group">
                         <label>关键词</label>
-                        <input type="text" v-model="hotelForm.keyword" placeholder="酒店名 / 位置（可选）">
+                        <div class="kw-wrap">
+                            <input type="text" v-model="hotelForm.keyword" placeholder="酒店名 / 位置（可选）" @focus="kwOpen = true" @input="kwOpen = true" @keydown.esc="kwOpen = false">
+                            <div class="kw-panel picker-panel" v-if="kwOpen && kwSuggestions.length">
+                                <div class="kw-item" v-for="s in kwSuggestions" :key="s.type + s.name" @click="pickKw(s)">
+                                    <i class="fas" :class="s.type === '酒店' ? 'fa-hotel' : 'fa-location-dot'"></i>
+                                    <b>{{ s.name }}</b>
+                                    <em>{{ s.type }}</em>
+                                </div>
+                            </div>
+                        </div>
                     </div>
-                    <button class="search-btn" @click="searchHotels">
-                        <i class="fas fa-search"></i> 搜酒店
+                    <button class="search-btn" :disabled="isLoading" @click="searchHotels">
+                        <i class="fas" :class="isLoading ? 'fa-circle-notch fa-spin' : 'fa-search'"></i> {{ isLoading ? '查询中…' : '搜酒店' }}
                     </button>
                 </div>
 
                 <!-- 门票搜索 -->
                 <div class="search-form" v-if="searchTab === 'ticket'">
-                    <div class="form-group">
+                    <div class="form-group fg-city">
                         <label>目的地</label>
-                        <input type="text" v-model="ticketForm.city" placeholder="城市 / 目的地" list="city-list">
+                        <city-picker v-model="ticketForm.city" :options="cities" placeholder="城市 / 目的地"></city-picker>
                     </div>
-                    <div class="form-group">
+                    <div class="form-group fg-date">
                         <label>游玩日期</label>
-                        <input type="date" v-model="ticketForm.date" :min="today">
+                        <cal-picker v-model="ticketForm.date" :min="today()" placeholder="选择游玩日期"></cal-picker>
                     </div>
                     <div class="form-group">
                         <label>关键词</label>
                         <input type="text" v-model="ticketForm.keyword" placeholder="景点 / 活动名（可选）">
                     </div>
-                    <button class="search-btn" @click="searchTickets">
-                        <i class="fas fa-search"></i> 搜门票·活动
+                    <button class="search-btn" :disabled="isLoading" @click="searchTickets">
+                        <i class="fas" :class="isLoading ? 'fa-circle-notch fa-spin' : 'fa-search'"></i> {{ isLoading ? '查询中…' : '搜门票·活动' }}
                     </button>
                 </div>
 
                 <!-- 车票搜索 -->
                 <div class="search-form" v-if="searchTab === 'train'">
-                    <div class="form-group">
+                    <div class="form-group fg-city">
                         <label>出发地</label>
-                        <input type="text" v-model="trainForm.from" placeholder="出发城市" list="city-list">
+                        <city-picker v-model="trainForm.from" :options="cities" placeholder="出发城市"></city-picker>
                     </div>
-                    <div class="form-group">
+                    <div class="swap-wrap">
+                        <button type="button" class="swap-btn" :class="{spin: swapAnim === 'train'}" title="交换出发地与目的地" @click="swapCities"><i class="fas fa-right-left"></i></button>
+                    </div>
+                    <div class="form-group fg-city">
                         <label>目的地</label>
-                        <input type="text" v-model="trainForm.to" placeholder="到达城市" list="city-list">
+                        <city-picker v-model="trainForm.to" :options="cities" placeholder="到达城市"></city-picker>
                     </div>
-                    <div class="form-group">
+                    <div class="form-group fg-date">
                         <label>出发日期</label>
-                        <input type="date" v-model="trainForm.date" :min="today">
+                        <cal-picker v-model="trainForm.date" :min="today()" placeholder="选择出发日期"></cal-picker>
                     </div>
-                    <button class="search-btn" @click="searchTrains">
-                        <i class="fas fa-search"></i> 搜车票
+                    <button class="search-btn" :disabled="isLoading" @click="searchTrains">
+                        <i class="fas" :class="isLoading ? 'fa-circle-notch fa-spin' : 'fa-search'"></i> {{ isLoading ? '查询中…' : '搜车票' }}
                     </button>
                 </div>
 
@@ -3337,116 +3555,155 @@
                         </span>
                         <em class="fs-scope-tip"><i class="fas fa-id-card-clip"></i> {{ flightScopeMeta.tip }}</em>
                     </div>
-                    <div class="form-group">
+                    <div class="form-group fg-city">
                         <label>出发城市</label>
-                        <input type="text" v-model="flightForm.from" placeholder="出发城市" :list="flightScopeMeta.datalist">
+                        <city-picker v-model="flightForm.from" :options="flightScopeCities[flightScope]" placeholder="出发城市"></city-picker>
                     </div>
-                    <div class="form-group">
+                    <div class="swap-wrap">
+                        <button type="button" class="swap-btn" :class="{spin: swapAnim === 'flight'}" title="交换出发与到达城市" @click="swapCities"><i class="fas fa-right-left"></i></button>
+                    </div>
+                    <div class="form-group fg-city">
                         <label>到达城市</label>
-                        <input type="text" v-model="flightForm.to" placeholder="到达城市" :list="flightScopeMeta.datalist">
+                        <city-picker v-model="flightForm.to" :options="flightScopeCities[flightScope]" placeholder="到达城市"></city-picker>
                     </div>
-                    <div class="form-group">
+                    <div class="form-group fg-date">
                         <label>出发日期</label>
-                        <input type="date" v-model="flightForm.date" :min="today">
+                        <cal-picker v-model="flightForm.date" :min="today()" placeholder="选择出发日期"></cal-picker>
                     </div>
-                    <button class="search-btn" @click="searchFlights">
-                        <i class="fas fa-search"></i> 搜{{ flightScopeMeta.name }}机票
+                    <button class="search-btn" :disabled="isLoading" @click="searchFlights">
+                        <i class="fas" :class="isLoading ? 'fa-circle-notch fa-spin' : 'fa-search'"></i> {{ isLoading ? '查询中…' : '搜' + flightScopeMeta.name + '机票' }}
                     </button>
                 </div>
 
                 <!-- 汽车票搜索 -->
                 <div class="search-form" v-if="searchTab === 'bus'">
-                    <div class="form-group">
+                    <div class="form-group fg-city">
                         <label>出发城市</label>
-                        <input type="text" v-model="busForm.from" placeholder="出发城市" list="city-list">
+                        <city-picker v-model="busForm.from" :options="cities" placeholder="出发城市"></city-picker>
                     </div>
-                    <div class="form-group">
+                    <div class="swap-wrap">
+                        <button type="button" class="swap-btn" :class="{spin: swapAnim === 'bus'}" title="交换出发与到达城市" @click="swapCities"><i class="fas fa-right-left"></i></button>
+                    </div>
+                    <div class="form-group fg-city">
                         <label>到达城市</label>
-                        <input type="text" v-model="busForm.to" placeholder="到达城市" list="city-list">
+                        <city-picker v-model="busForm.to" :options="cities" placeholder="到达城市"></city-picker>
                     </div>
-                    <div class="form-group">
+                    <div class="form-group fg-date">
                         <label>出发日期</label>
-                        <input type="date" v-model="busForm.date" :min="today">
+                        <cal-picker v-model="busForm.date" :min="today()" placeholder="选择出发日期"></cal-picker>
                     </div>
-                    <button class="search-btn" @click="searchBuses">
-                        <i class="fas fa-search"></i> 搜汽车票
+                    <button class="search-btn" :disabled="isLoading" @click="searchBuses">
+                        <i class="fas" :class="isLoading ? 'fa-circle-notch fa-spin' : 'fa-search'"></i> {{ isLoading ? '查询中…' : '搜汽车票' }}
                     </button>
                 </div>
 
                 <!-- 船票搜索 -->
                 <div class="search-form" v-if="searchTab === 'ship'">
-                    <div class="form-group">
+                    <div class="form-group fg-city">
                         <label>出发城市</label>
-                        <input type="text" v-model="shipForm.from" placeholder="港口城市，如 珠海" list="ship-city-list">
+                        <city-picker v-model="shipForm.from" :options="shipCities" placeholder="港口城市，如 珠海"></city-picker>
                     </div>
-                    <div class="form-group">
+                    <div class="swap-wrap">
+                        <button type="button" class="swap-btn" :class="{spin: swapAnim === 'ship'}" title="交换出发港与到达港" @click="swapCities"><i class="fas fa-right-left"></i></button>
+                    </div>
+                    <div class="form-group fg-city">
                         <label>到达城市</label>
-                        <input type="text" v-model="shipForm.to" placeholder="如 澳门" list="ship-city-list">
+                        <city-picker v-model="shipForm.to" :options="shipCities" placeholder="如 澳门"></city-picker>
                     </div>
-                    <div class="form-group">
+                    <div class="form-group fg-date">
                         <label>出发日期</label>
-                        <input type="date" v-model="shipForm.date" :min="today">
+                        <cal-picker v-model="shipForm.date" :min="today()" placeholder="选择出发日期"></cal-picker>
                     </div>
-                    <button class="search-btn" @click="searchShips">
-                        <i class="fas fa-ship"></i> 搜船票
+                    <button class="search-btn" :disabled="isLoading" @click="searchShips">
+                        <i class="fas" :class="isLoading ? 'fa-circle-notch fa-spin' : 'fa-ship'"></i> {{ isLoading ? '查询中…' : '搜船票' }}
                     </button>
                 </div>
-                <datalist id="ship-city-list">
-                    <option v-for="c in shipCities" :key="c" :value="c"></option>
-                </datalist>
 
                 <!-- 度假线路搜索 -->
                 <div class="search-form" v-if="searchTab === 'vacation'">
-                    <div class="form-group">
+                    <div class="form-group fg-city">
                         <label>目的地</label>
-                        <input type="text" v-model="vacationForm.city" list="city-list" placeholder="城市，如 三亚">
+                        <city-picker v-model="vacationForm.city" :options="cities" placeholder="城市，如 三亚"></city-picker>
                     </div>
-                    <div class="form-group">
+                    <div class="form-group fg-date">
                         <label>出发日期</label>
-                        <input type="date" v-model="vacationForm.date" :min="today">
+                        <cal-picker v-model="vacationForm.date" :min="today()" placeholder="选择出发日期"></cal-picker>
                     </div>
-                    <button class="search-btn" @click="searchVacations">
-                        <i class="fas fa-umbrella-beach"></i> 搜度假线路
+                    <button class="search-btn" :disabled="isLoading" @click="searchVacations">
+                        <i class="fas" :class="isLoading ? 'fa-circle-notch fa-spin' : 'fa-umbrella-beach'"></i> {{ isLoading ? '查询中…' : '搜度假线路' }}
                     </button>
                 </div>
 
                 <!-- 租车用车搜索 -->
                 <div class="search-form" v-if="searchTab === 'car'">
-                    <div class="form-group">
+                    <div class="form-group fg-city">
                         <label>取车城市</label>
-                        <input type="text" v-model="carForm.city" list="city-list">
+                        <city-picker v-model="carForm.city" :options="cities" placeholder="取车城市"></city-picker>
                     </div>
-                    <div class="form-group">
+                    <div class="form-group fg-date">
                         <label>取车日期</label>
-                        <input type="date" v-model="carForm.date" :min="today">
+                        <cal-picker v-model="carForm.date" :min="today()" placeholder="选择取车日期"></cal-picker>
                     </div>
-                    <button class="search-btn" @click="searchCars">
-                        <i class="fas fa-car"></i> 搜车型
+                    <button class="search-btn" :disabled="isLoading" @click="searchCars">
+                        <i class="fas" :class="isLoading ? 'fa-circle-notch fa-spin' : 'fa-car'"></i> {{ isLoading ? '查询中…' : '搜车型' }}
                     </button>
                 </div>
 
-                <datalist id="city-list">
-                    <option v-for="city in cities" :key="city" :value="city"></option>
-                </datalist>
-                <datalist id="flight-city-domestic">
-                    <option v-for="c in flightScopeCities.domestic" :key="'fd' + c" :value="c"></option>
-                </datalist>
-                <datalist id="flight-city-international">
-                    <option v-for="c in flightScopeCities.international" :key="'fi' + c" :value="c"></option>
-                </datalist>
-                <datalist id="flight-city-hmt">
-                    <option v-for="c in flightScopeCities.hmt" :key="'fh' + c" :value="c"></option>
-                </datalist>
+                <!-- 最近搜索：点一条直接按当时的条件重查，携程式的「搜索历史」体验 -->
+                <div class="search-history" v-if="moduleHistory.length">
+                    <span class="sh-label"><i class="fas fa-clock-rotate-left"></i> 最近搜索</span>
+                    <span class="sh-chip" v-for="h in moduleHistory" :key="h.label" :title="'点击重新查询：' + h.label" @click="applyHistory(h)">{{ h.label }}</span>
+                    <span class="sh-clear" @click="clearHistory"><i class="fas fa-trash-can"></i> 清空</span>
+                </div>
+            </div>
+
+            <!-- 携程式吸顶精简搜索条：滚过搜索卡后浮现，条件一眼可见，一键回去修改 -->
+            <div class="mini-search" v-if="miniShow">
+                <span class="ms-ico"><i class="fas" :class="miniInfo.icon"></i></span>
+                <div class="ms-main" @click="backToSearch" title="回到顶部修改搜索条件">
+                    <b>{{ miniInfo.title }}</b>
+                    <em>{{ miniInfo.sub }}</em>
+                </div>
+                <span class="ms-count" v-if="miniInfo.count">{{ miniInfo.count }}</span>
+                <button class="ms-btn" @click="backToSearch"><i class="fas fa-pen"></i> 修改搜索</button>
             </div>
 
             <!-- 酒店列表（只在真查过之后列，否则首页会被上一次的残留结果占位） -->
             <template v-if="searchTab === 'hotel' && hasSearched">
                 <div class="section-title" v-if="hasSearched">
                     <h2><i class="fas fa-hotel"></i>{{ hotelForm.city }}酒店</h2>
-                    <span class="sub" v-if="hotels.length > 0">共 {{ hotels.length }} 家</span>
+                    <span class="sub" v-if="hotels.length > 0">共 {{ filteredHotels.length }} 家<template v-if="filteredHotels.length !== hotels.length">（已筛选，全部 {{ hotels.length }} 家）</template></span>
+                </div>
+                <!-- 携程式排序筛选栏：价格相关项同样受 priceVisible 登录门禁约束 -->
+                <div class="result-toolbar" v-if="hotels.length">
+                    <div class="rt-row">
+                        <span class="rt-cap">排序</span>
+                        <span class="rt-chip" :class="{on: hotelSort === 'reco'}" @click="hotelSort = 'reco'">推荐</span>
+                        <span class="rt-chip" :class="{on: hotelSort === 'score'}" @click="hotelSort = 'score'">好评优先</span>
+                        <span class="rt-chip" v-if="priceVisible" :class="{on: hotelSort === 'priceAsc'}" @click="hotelSort = 'priceAsc'">低价优先</span>
+                        <span class="rt-chip" v-if="priceVisible" :class="{on: hotelSort === 'priceDesc'}" @click="hotelSort = 'priceDesc'">高价优先</span>
+                        <span class="rt-chip" :class="{on: hotelSort === 'dist'}" @click="hotelSort = 'dist'">距离优先</span>
+                        <span class="rt-clear" v-if="hotelFilterActive" @click="resetHotelFilters"><i class="fas fa-rotate-left"></i> 清空筛选</span>
+                    </div>
+                    <div class="rt-row">
+                        <span class="rt-cap">星级</span>
+                        <span class="rt-chip" :class="{on: !hotelStar}" @click="hotelStar = 0">不限</span>
+                        <span class="rt-chip" :class="{on: hotelStar === 2}" @click="hotelStar = 2">经济型</span>
+                        <span class="rt-chip" :class="{on: hotelStar === 3}" @click="hotelStar = 3">舒适型</span>
+                        <span class="rt-chip" :class="{on: hotelStar === 4}" @click="hotelStar = 4">高档型</span>
+                        <span class="rt-chip" :class="{on: hotelStar === 5}" @click="hotelStar = 5">豪华型</span>
+                        <template v-if="priceVisible">
+                            <span class="rt-cap rt-gap">价格</span>
+                            <span class="rt-chip" :class="{on: !hotelPriceBand}" @click="hotelPriceBand = ''">不限</span>
+                            <span class="rt-chip" :class="{on: hotelPriceBand === '0-300'}" @click="hotelPriceBand = '0-300'">¥300以下</span>
+                            <span class="rt-chip" :class="{on: hotelPriceBand === '300-600'}" @click="hotelPriceBand = '300-600'">¥300-600</span>
+                            <span class="rt-chip" :class="{on: hotelPriceBand === '600-1000'}" @click="hotelPriceBand = '600-1000'">¥600-1000</span>
+                            <span class="rt-chip" :class="{on: hotelPriceBand === '1000-0'}" @click="hotelPriceBand = '1000-0'">¥1000以上</span>
+                        </template>
+                    </div>
                 </div>
                 <div class="hotel-list stagger">
-                    <div class="hotel-card" v-for="hotel in hotels" :key="hotel.id" @click="openHotelDetail(hotel)">
+                    <div class="hotel-card" v-for="hotel in filteredHotels" :key="hotel.id" @click="openHotelDetail(hotel)">
                         <div class="hotel-thumb"><i class="fas fa-hotel"></i></div>
                         <div class="hotel-info">
                             <div class="hotel-name">{{ hotel.name }}</div>
@@ -3467,6 +3724,11 @@
                             </div>
                         </div>
                     </div>
+                </div>
+                <div class="filter-empty" v-if="hotels.length && !filteredHotels.length">
+                    <i class="fas fa-filter-circle-xmark"></i>
+                    <p>没有符合筛选条件的酒店，试试放宽条件</p>
+                    <button class="btn-default" @click="resetHotelFilters">清空筛选条件</button>
                 </div>
             </template>
 
@@ -3509,9 +3771,32 @@
             <template v-if="searchTab === 'train' && hasSearched">
                 <div class="section-title" v-if="hasSearched">
                     <h2><i class="fas fa-train"></i>{{ trainForm.from }} → {{ trainForm.to }}</h2>
-                    <span class="sub" v-if="trains.length > 0">共 {{ trains.length }} 个车次</span>
+                    <span class="sub" v-if="trains.length > 0">共 {{ filteredTrains.length }} 个车次<template v-if="filteredTrains.length !== trains.length">（已筛选，全部 {{ trains.length }} 个）</template></span>
                 </div>
-                <div class="train-list stagger" v-if="trains.length > 0">
+                <!-- 携程式日期切换条：前后各 3 天，点哪天就按哪天重查 -->
+                <div class="date-strip">
+                    <span class="ds-arrow" :class="{off: trainForm.date <= today()}" @click="shiftSearchDate('train', -1)"><i class="fas fa-chevron-left"></i> 前一天</span>
+                    <div class="ds-days">
+                        <span class="ds-day" v-for="d in trainDateStrip" :key="d.date" :class="{on: d.active}" @click="pickStripDate('train', d.date)">
+                            <b>{{ d.label }}</b><em>{{ d.week }}</em>
+                        </span>
+                    </div>
+                    <span class="ds-arrow" @click="shiftSearchDate('train', 1)">后一天 <i class="fas fa-chevron-right"></i></span>
+                </div>
+                <div class="result-toolbar" v-if="trains.length">
+                    <div class="rt-row">
+                        <span class="rt-cap">排序</span>
+                        <span class="rt-chip" :class="{on: trainSort === 'dep'}" @click="trainSort = 'dep'">出发早→晚</span>
+                        <span class="rt-chip" :class="{on: trainSort === 'dur'}" @click="trainSort = 'dur'">耗时最短</span>
+                        <span class="rt-chip" v-if="priceVisible" :class="{on: trainSort === 'price'}" @click="trainSort = 'price'">价格最低</span>
+                        <template v-if="priceVisible">
+                            <span class="rt-cap rt-gap">筛选</span>
+                            <span class="rt-chip" :class="{on: trainOnlyGD}" @click="trainOnlyGD = !trainOnlyGD"><i class="fas" :class="trainOnlyGD ? 'fa-square-check' : 'fa-square'"></i> 只看高铁动车</span>
+                            <span class="rt-chip" :class="{on: trainOnlyAvail}" @click="trainOnlyAvail = !trainOnlyAvail"><i class="fas" :class="trainOnlyAvail ? 'fa-square-check' : 'fa-square'"></i> 只看有票</span>
+                        </template>
+                    </div>
+                </div>
+                <div class="train-list stagger" v-if="filteredTrains.length > 0">
                     <div class="train-header">
                         <div>车次</div>
                         <div>出发站 - 到达站</div>
@@ -3527,7 +3812,7 @@
                         <div v-else class="th-gate">余票/票价</div>
                         <div>操作</div>
                     </div>
-                    <div class="train-item" v-for="train in trains" :key="train.id" @click="trainRowClick(train)">
+                    <div class="train-item" v-for="train in filteredTrains" :key="train.id" @click="trainRowClick(train)">
                         <div>
                             <div class="train-no">{{ train.trainNo }}</div>
                             <div class="train-type">{{ train.typeName }}</div>
@@ -3563,16 +3848,38 @@
                         </div>
                     </div>
                 </div>
+                <div class="filter-empty" v-if="trains.length && !filteredTrains.length">
+                    <i class="fas fa-filter-circle-xmark"></i>
+                    <p>没有符合筛选条件的车次，试试取消部分筛选</p>
+                    <button class="btn-default" @click="trainOnlyGD = false; trainOnlyAvail = false">清空筛选条件</button>
+                </div>
             </template>
 
             <!-- 机票列表 -->
             <template v-if="searchTab === 'flight' && hasSearched">
                 <div class="section-title" v-if="hasSearched">
                     <h2><i class="fas fa-plane"></i>{{ flightForm.from }} → {{ flightForm.to }}<span class="fs-badge">{{ flightScopeMeta.name }}</span></h2>
-                    <span class="sub" v-if="flights.length > 0">共 {{ flights.length }} 个航班</span>
+                    <span class="sub" v-if="flights.length > 0">共 {{ filteredFlights.length }} 个航班</span>
+                </div>
+                <div class="date-strip">
+                    <span class="ds-arrow" :class="{off: flightForm.date <= today()}" @click="shiftSearchDate('flight', -1)"><i class="fas fa-chevron-left"></i> 前一天</span>
+                    <div class="ds-days">
+                        <span class="ds-day" v-for="d in flightDateStrip" :key="d.date" :class="{on: d.active}" @click="pickStripDate('flight', d.date)">
+                            <b>{{ d.label }}</b><em>{{ d.week }}</em>
+                        </span>
+                    </div>
+                    <span class="ds-arrow" @click="shiftSearchDate('flight', 1)">后一天 <i class="fas fa-chevron-right"></i></span>
+                </div>
+                <div class="result-toolbar" v-if="flights.length">
+                    <div class="rt-row">
+                        <span class="rt-cap">排序</span>
+                        <span class="rt-chip" :class="{on: flightSort === 'dep'}" @click="flightSort = 'dep'">起飞最早</span>
+                        <span class="rt-chip" :class="{on: flightSort === 'dur'}" @click="flightSort = 'dur'">耗时最短</span>
+                        <span class="rt-chip" v-if="priceVisible" :class="{on: flightSort === 'price'}" @click="flightSort = 'price'">价格最低</span>
+                    </div>
                 </div>
                 <div class="flight-list stagger">
-                    <div class="flight-card" v-for="f in flights" :key="f.id" @click="openBooking(f)">
+                    <div class="flight-card" v-for="f in filteredFlights" :key="f.id" @click="openBooking(f)">
                         <div class="flight-airline">
                             <div class="airline-name">{{ f.airline }}</div>
                             <div class="flight-plane">{{ f.flightNo }} · {{ f.plane }}</div>
@@ -5536,6 +5843,383 @@
             update(el, binding) { if (binding.value !== binding.oldValue) rollNumber(el, binding.value); }
         });
 
+        // ==================== 携程式预订控件：城市选择 / 日历 / 房间住客 ====================
+        // 城市拼音（空格分音节）：支持中文、全拼、首字母三种检索方式
+        const CITY_PINYIN = {
+            '北京': 'bei jing', '上海': 'shang hai', '广州': 'guang zhou', '深圳': 'shen zhen', '杭州': 'hang zhou',
+            '南京': 'nan jing', '成都': 'cheng du', '重庆': 'chong qing', '武汉': 'wu han', '西安': 'xi an',
+            '郑州': 'zheng zhou', '长沙': 'chang sha', '天津': 'tian jin', '青岛': 'qing dao', '大连': 'da lian',
+            '厦门': 'xia men', '昆明': 'kun ming', '三亚': 'san ya', '桂林': 'gui lin', '丽江': 'li jiang',
+            '东京': 'dong jing', '首尔': 'shou er', '曼谷': 'man gu', '新加坡': 'xin jia po', '巴厘岛': 'ba li dao',
+            '迪拜': 'di bai', '巴黎': 'ba li', '伦敦': 'lun dun', '罗马': 'luo ma', '悉尼': 'xi ni',
+            '纽约': 'niu yue', '洛杉矶': 'luo shan ji', '夏威夷': 'xia wei yi', '里约热内卢': 'li yue re nei lu',
+            '开罗': 'kai luo', '开普敦': 'kai pu dun', '莫斯科': 'mo si ke', '奥克兰': 'ao ke lan', '温哥华': 'wen ge hua',
+            '大阪': 'da ban', '中国香港': 'zhong guo xiang gang', '中国澳门': 'zhong guo ao men', '中国台湾': 'zhong guo tai wan',
+            '台北': 'tai bei', '高雄': 'gao xiong', '珠海': 'zhu hai', '澳门': 'ao men', '舟山': 'zhou shan',
+            '普陀山': 'pu tuo shan', '海口': 'hai kou', '徐闻': 'xu wen', '烟台': 'yan tai', '西沙': 'xi sha'
+        };
+        const HOT_CITIES = ['北京', '上海', '广州', '深圳', '杭州', '南京', '成都', '重庆', '武汉', '西安', '长沙', '厦门', '青岛', '三亚', '昆明', '丽江'];
+        const CP_WEEK = ['周日', '周一', '周二', '周三', '周四', '周五', '周六'];
+        const cpPad = n => (n < 10 ? '0' : '') + n;
+        // 全部按本地时区拼日期，绝不用 toISOString（UTC 凌晨会错一天）
+        const cpFmt = d => d.getFullYear() + '-' + cpPad(d.getMonth() + 1) + '-' + cpPad(d.getDate());
+        const cpParse = s => { const p = (s || '').split('-'); return new Date(+p[0], +p[1] - 1, +p[2]); };
+        const cpToday = () => { const d = new Date(); return new Date(d.getFullYear(), d.getMonth(), d.getDate()); };
+        const cpAdd = (s, n) => { const d = cpParse(s); d.setDate(d.getDate() + n); return cpFmt(d); };
+        const cpDiff = (a, b) => Math.round((cpParse(b) - cpParse(a)) / 86400000);
+        const cpTag = s => { const t = cpFmt(cpToday()); if (s === t) return '今天'; if (s === cpAdd(t, 1)) return '明天'; if (s === cpAdd(t, 2)) return '后天'; return ''; };
+        const cpLabel = s => s ? (+s.split('-')[1]) + '月' + (+s.split('-')[2]) + '日' : '';
+        const cpShort = s => s ? (+s.split('-')[1]) + '-' + s.split('-')[2] : '';
+        const cpWeekOf = s => s ? CP_WEEK[cpParse(s).getDay()] : '';
+        // 生成一个月的日历格子（周日起始，后补空位用 null）
+        const cpMonth = (y, m) => {
+            const cells = [];
+            const pad = new Date(y, m, 1).getDay();
+            const days = new Date(y, m + 1, 0).getDate();
+            for (let i = 0; i < pad; i++) cells.push(null);
+            for (let d = 1; d <= days; d++) cells.push(cpFmt(new Date(y, m, d)));
+            return { key: y + '-' + m, label: y + '年' + (m + 1) + '月', cells };
+        };
+        // 下拉面板通用行为：点外部关闭、ESC 只关自己（捕获阶段截住，不误伤底层弹窗）
+        const cpPopover = {
+            data() { return { open: false }; },
+            methods: {
+                cpOutside(e) { if (this.open && !this.$el.contains(e.target)) this.open = false; },
+                cpEsc(e) { if (e.key === 'Escape' && this.open) { this.open = false; e.stopPropagation(); } }
+            },
+            mounted() {
+                document.addEventListener('mousedown', this.cpOutside);
+                document.addEventListener('keydown', this.cpEsc, true);
+                // 页面滚动时收起面板（携程式交互）；面板内部滚动不触发 window scroll，不受影响
+                this.cpScroll = () => { if (this.open) this.open = false; };
+                window.addEventListener('scroll', this.cpScroll, { passive: true });
+            },
+            beforeDestroy() {
+                document.removeEventListener('mousedown', this.cpOutside);
+                document.removeEventListener('keydown', this.cpEsc, true);
+                window.removeEventListener('scroll', this.cpScroll);
+            }
+        };
+        const cpDateText = {
+            methods: {
+                dLabel: cpLabel, dTag: cpTag, dWeek: cpWeekOf, dShort: cpShort,
+                dDay(s) { return s ? +s.split('-')[2] : ''; }
+            }
+        };
+
+        // 城市选择器：热门城市宫格 + 字母索引 + 拼音搜索 + 最近选过的城市
+        Vue.component('city-picker', {
+            mixins: [cpPopover],
+            props: {
+                value: { type: String, default: '' },
+                options: { type: Array, default: () => [] },
+                placeholder: { type: String, default: '请选择城市' }
+            },
+            data() { return { query: '', tab: 'hot', history: [] }; },
+            computed: {
+                hotList() {
+                    const h = this.options.filter(c => HOT_CITIES.indexOf(c) >= 0);
+                    return (h.length ? h : this.options).slice(0, 12);
+                },
+                groups() {
+                    const g = {};
+                    this.options.forEach(c => {
+                        const L = ((CITY_PINYIN[c] || '#')[0]).toUpperCase();
+                        (g[L] = g[L] || []).push(c);
+                    });
+                    return g;
+                },
+                letters() { return Object.keys(this.groups).sort(); },
+                matches() {
+                    const raw = this.query.trim();
+                    const q = raw.toLowerCase();
+                    if (!q) return [];
+                    return this.options.filter(c => {
+                        const py = CITY_PINYIN[c] || '';
+                        const full = py.replace(/ /g, '');
+                        const initials = py.split(' ').map(w => w[0]).join('');
+                        return c.indexOf(raw) >= 0 || full.indexOf(q) >= 0 || initials.indexOf(q) >= 0;
+                    }).slice(0, 12);
+                },
+                tabList() {
+                    if (this.tab === 'hot') return this.hotList;
+                    if (this.tab === 'his') return this.history.filter(c => this.options.indexOf(c) >= 0);
+                    return this.groups[this.tab] || [];
+                }
+            },
+            watch: {
+                open(v) {
+                    if (v) {
+                        this.query = '';
+                        this.tab = 'hot';
+                        try { this.history = JSON.parse(localStorage.getItem('ctripCityHistory') || '[]') || []; } catch (e) { this.history = []; }
+                        this.$nextTick(() => { if (this.$refs.q) this.$refs.q.focus(); });
+                    }
+                }
+            },
+            methods: {
+                py(c) { return (CITY_PINYIN[c] || '').replace(/ /g, ''); },
+                pick(c) {
+                    this.$emit('input', c);
+                    try {
+                        const h = [c].concat(this.history.filter(x => x !== c)).slice(0, 8);
+                        localStorage.setItem('ctripCityHistory', JSON.stringify(h));
+                    } catch (e) { }
+                    this.open = false;
+                },
+                onKey(e) { if (e.key === 'Enter' && this.matches.length) this.pick(this.matches[0]); }
+            },
+            template: `
+                <div class="cp-wrap">
+                    <div class="cp-field" :class="{on: open}" @click="open = !open">
+                        <i class="fas fa-location-dot cp-ico"></i>
+                        <span class="cp-val" :class="{ph: !value}">{{ value || placeholder }}</span>
+                        <i class="fas fa-caret-down cp-caret"></i>
+                    </div>
+                    <div class="cp-panel picker-panel" v-if="open" @click.stop>
+                        <div class="cp-search">
+                            <i class="fas fa-magnifying-glass"></i>
+                            <input ref="q" v-model="query" type="text" placeholder="中文 / 拼音 / 首字母，如 北京 beijing bj" @keydown="onKey">
+                        </div>
+                        <template v-if="query.trim()">
+                            <div class="cp-matches" v-if="matches.length">
+                                <div class="cp-match" v-for="c in matches" :key="c" @click="pick(c)">
+                                    <i class="fas fa-location-dot"></i><b>{{ c }}</b><span>{{ py(c) }}</span>
+                                </div>
+                            </div>
+                            <div class="cp-none" v-else>未找到「{{ query.trim() }}」，换个关键词试试</div>
+                        </template>
+                        <template v-else>
+                            <div class="cp-tabs">
+                                <span v-if="history.length" :class="{on: tab === 'his'}" @click="tab = 'his'">历史</span>
+                                <span :class="{on: tab === 'hot'}" @click="tab = 'hot'">热门</span>
+                                <span v-for="L in letters" :key="L" :class="{on: tab === L}" @click="tab = L">{{ L }}</span>
+                            </div>
+                            <div class="cp-grid">
+                                <span class="cp-city" v-for="c in tabList" :key="c" :class="{on: c === value}" @click="pick(c)">{{ c }}</span>
+                                <span class="cp-none" v-if="!tabList.length">暂无记录</span>
+                            </div>
+                        </template>
+                    </div>
+                </div>`
+        });
+
+        // 单日历：双月视图 + 今天/明天/后天快捷位 + 周末橙色 + 过去日期置灰
+        Vue.component('cal-picker', {
+            mixins: [cpPopover, cpDateText],
+            props: {
+                value: { type: String, default: '' },
+                min: { type: String, default: '' },
+                placeholder: { type: String, default: '选择日期' }
+            },
+            data() { const t = cpToday(); return { vy: t.getFullYear(), vm: t.getMonth() }; },
+            computed: {
+                minDate() { return this.min || cpFmt(cpToday()); },
+                months() {
+                    const n = new Date(this.vy, this.vm + 1, 1);
+                    return [cpMonth(this.vy, this.vm), cpMonth(n.getFullYear(), n.getMonth())];
+                },
+                quicks() {
+                    const t = cpFmt(cpToday());
+                    return [{ label: '今天', date: t }, { label: '明天', date: cpAdd(t, 1) }, { label: '后天', date: cpAdd(t, 2) }];
+                }
+            },
+            watch: {
+                open(v) {
+                    if (v) {
+                        const base = this.value ? cpParse(this.value) : cpToday();
+                        this.vy = base.getFullYear();
+                        this.vm = base.getMonth();
+                    }
+                }
+            },
+            methods: {
+                shift(n) { const d = new Date(this.vy, this.vm + n, 1); this.vy = d.getFullYear(); this.vm = d.getMonth(); },
+                off(d) { return d < this.minDate; },
+                pick(d) { if (!d || this.off(d)) return; this.$emit('input', d); this.open = false; },
+                cls(d) {
+                    const wd = cpParse(d).getDay();
+                    return { off: this.off(d), on: d === this.value, wk: wd === 0 || wd === 6 };
+                }
+            },
+            template: `
+                <div class="cp-wrap">
+                    <div class="cp-field cal-field" :class="{on: open}" @click="open = !open">
+                        <i class="far fa-calendar-days cp-ico"></i>
+                        <div class="cal-part">
+                            <b :class="{ph: !value}">{{ value ? dLabel(value) : placeholder }}</b>
+                            <em v-if="value">{{ dTag(value) || dWeek(value) }}</em>
+                        </div>
+                        <i class="fas fa-caret-down cp-caret"></i>
+                    </div>
+                    <div class="cal-panel picker-panel" v-if="open" @click.stop>
+                        <div class="cal-head">
+                            <span class="cal-nav" @click="shift(-1)"><i class="fas fa-chevron-left"></i></span>
+                            <span class="cal-quick">
+                                <span v-for="q in quicks" :key="q.label" :class="{on: value === q.date}" @click="pick(q.date)">{{ q.label }}<em>{{ dShort(q.date) }}</em></span>
+                            </span>
+                            <span class="cal-nav" @click="shift(1)"><i class="fas fa-chevron-right"></i></span>
+                        </div>
+                        <div class="cal-months">
+                            <div class="cal-month" v-for="mo in months" :key="mo.key">
+                                <div class="cal-mtitle">{{ mo.label }}</div>
+                                <div class="cal-wk"><span v-for="(w, i) in ['日','一','二','三','四','五','六']" :key="w" :class="{wk: i === 0 || i === 6}">{{ w }}</span></div>
+                                <div class="cal-grid">
+                                    <span v-for="(d, i) in mo.cells" :key="i" class="cal-day" :class="d ? cls(d) : 'blank'" @click="pick(d)">
+                                        <template v-if="d"><b>{{ dDay(d) }}</b><i v-if="dTag(d)">{{ dTag(d) }}</i></template>
+                                    </span>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="cal-hint"><i class="fas fa-circle-info"></i> 灰色日期不可选，橙色为周末</div>
+                    </div>
+                </div>`
+        });
+
+        // 酒店入住/离店范围日历：先点入住再点离店，悬停预览区间，实时显示共几晚
+        Vue.component('cal-range', {
+            mixins: [cpPopover, cpDateText],
+            props: {
+                start: { type: String, default: '' },
+                end: { type: String, default: '' },
+                min: { type: String, default: '' }
+            },
+            data() { const t = cpToday(); return { vy: t.getFullYear(), vm: t.getMonth(), phase: 'start', hover: '' }; },
+            watch: {
+                open(v) {
+                    if (v) {
+                        const base = this.start ? cpParse(this.start) : cpToday();
+                        this.vy = base.getFullYear();
+                        this.vm = base.getMonth();
+                        this.phase = 'start';
+                        this.hover = '';
+                    } else if (this.start && !this.end) {
+                        // 只选了入住就点外面关掉：自动补一晚离店，不让表单留下半截日期
+                        this.$emit('update:end', cpAdd(this.start, 1));
+                    }
+                }
+            },
+            methods: {
+                shift(n) { const d = new Date(this.vy, this.vm + n, 1); this.vy = d.getFullYear(); this.vm = d.getMonth(); },
+                off(d) { return d < this.minDate; },
+                pick(d) {
+                    if (!d || this.off(d)) return;
+                    if (this.phase === 'start' || d <= this.start) {
+                        this.$emit('update:start', d);
+                        this.$emit('update:end', '');
+                        this.phase = 'end';
+                        this.hover = '';
+                    } else {
+                        this.$emit('update:end', d);
+                        this.open = false;
+                    }
+                },
+                enter(d) { if (this.phase === 'end' && d && !this.off(d)) this.hover = d; },
+                cls(d) {
+                    const wd = cpParse(d).getDay();
+                    const pe = this.previewEnd;
+                    return {
+                        off: this.off(d), wk: wd === 0 || wd === 6,
+                        'on-start': d === this.start,
+                        'on-end': !!pe && d === pe && pe !== this.start,
+                        'in-range': !!this.start && !!pe && d > this.start && d < pe
+                    };
+                }
+            },
+            template: `
+                <div class="cp-wrap">
+                    <div class="cp-field cr-field" :class="{on: open}" @click="open = !open">
+                        <div class="cr-part">
+                            <b :class="{ph: !start}">{{ start ? dLabel(start) : '入住日期' }}</b>
+                            <em v-if="start">{{ dTag(start) || dWeek(start) }}</em>
+                        </div>
+                        <span class="cr-nights">{{ nights > 0 ? '共' + nights + '晚' : '—' }}</span>
+                        <div class="cr-part">
+                            <b :class="{ph: !end}">{{ end ? dLabel(end) : '离店日期' }}</b>
+                            <em v-if="end">{{ dTag(end) || dWeek(end) }}</em>
+                        </div>
+                        <i class="fas fa-caret-down cp-caret"></i>
+                    </div>
+                    <div class="cal-panel picker-panel" v-if="open" @click.stop>
+                        <div class="cal-head">
+                            <span class="cal-nav" @click="shift(-1)"><i class="fas fa-chevron-left"></i></span>
+                            <span class="cal-range-tip">{{ phase === 'start' ? '请选择入住日期' : '请选择离店日期' }}<em v-if="phase === 'end' && hover && hover > start">（共{{ dShort(start) }} 至 {{ dShort(hover) }} · {{ nightsPreview }}晚）</em></span>
+                            <span class="cal-nav" @click="shift(1)"><i class="fas fa-chevron-right"></i></span>
+                        </div>
+                        <div class="cal-months" @mouseleave="hover = ''">
+                            <div class="cal-month" v-for="mo in months" :key="mo.key">
+                                <div class="cal-mtitle">{{ mo.label }}</div>
+                                <div class="cal-wk"><span v-for="(w, i) in ['日','一','二','三','四','五','六']" :key="w" :class="{wk: i === 0 || i === 6}">{{ w }}</span></div>
+                                <div class="cal-grid">
+                                    <span v-for="(d, i) in mo.cells" :key="i" class="cal-day" :class="d ? cls(d) : 'blank'" @click="pick(d)" @mouseenter="enter(d)">
+                                        <template v-if="d"><b>{{ dDay(d) }}</b><i v-if="d === start">入住</i><i v-else-if="d === previewEnd && previewEnd !== start">离店</i><i v-else-if="dTag(d)">{{ dTag(d) }}</i></template>
+                                    </span>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="cal-hint"><i class="fas fa-circle-info"></i> 先点入住日期，再点离店日期；灰色日期不可选</div>
+                    </div>
+                </div>`,
+            computed: {
+                minDate() { return this.min || cpFmt(cpToday()); },
+                months() {
+                    const n = new Date(this.vy, this.vm + 1, 1);
+                    return [cpMonth(this.vy, this.vm), cpMonth(n.getFullYear(), n.getMonth())];
+                },
+                nights() { return this.start && this.end ? cpDiff(this.start, this.end) : 0; },
+                nightsPreview() { return this.start && this.hover ? cpDiff(this.start, this.hover) : 0; },
+                previewEnd() {
+                    if (this.phase === 'end' && this.hover && this.hover > this.start) return this.hover;
+                    return this.end;
+                }
+            }
+        });
+
+        // 房间及住客：间数 / 成人 / 儿童步进器
+        Vue.component('room-picker', {
+            mixins: [cpPopover],
+            props: {
+                rooms: { type: Number, default: 1 },
+                adults: { type: Number, default: 2 },
+                children: { type: Number, default: 0 }
+            },
+            computed: {
+                rows() {
+                    return [
+                        { key: 'rooms', name: '房间', sub: '最多 8 间', val: this.rooms, min: 1, max: 8 },
+                        { key: 'adults', name: '成人', sub: '18 岁及以上', val: this.adults, min: 1, max: 10 },
+                        { key: 'children', name: '儿童', sub: '0-17 岁', val: this.children, min: 0, max: 6 }
+                    ];
+                }
+            },
+            methods: {
+                bump(row, n) {
+                    const v = row.val + n;
+                    if (v < row.min || v > row.max) return;
+                    this.$emit('update:' + row.key, v);
+                }
+            },
+            template: `
+                <div class="cp-wrap">
+                    <div class="cp-field" :class="{on: open}" @click="open = !open">
+                        <i class="fas fa-bed cp-ico"></i>
+                        <span class="cp-val">{{ rooms }}间 · {{ adults }}成人<template v-if="children"> · {{ children }}儿童</template></span>
+                        <i class="fas fa-caret-down cp-caret"></i>
+                    </div>
+                    <div class="rm-panel picker-panel" v-if="open" @click.stop>
+                        <div class="rm-row" v-for="row in rows" :key="row.key">
+                            <div class="rm-name"><b>{{ row.name }}</b><em>{{ row.sub }}</em></div>
+                            <div class="rm-step">
+                                <button type="button" :disabled="row.val <= row.min" @click="bump(row, -1)"><i class="fas fa-minus"></i></button>
+                                <span class="rm-num">{{ row.val }}</span>
+                                <button type="button" :disabled="row.val >= row.max" @click="bump(row, 1)"><i class="fas fa-plus"></i></button>
+                            </div>
+                        </div>
+                        <button type="button" class="rm-done" @click="open = false">确定</button>
+                    </div>
+                </div>`
+        });
+
         new Vue({
             el: '#app',
             data: {
@@ -5543,6 +6227,11 @@
                 searchTab: 'hotel',
                 hasSearched: false,
                 isLoading: false,
+                // 各模块最近搜索（localStorage 持久化）与出发/到达交换按钮的旋转动效标记
+                searchHistory: {},
+                swapAnim: '',
+                miniShow: false,
+                kwOpen: false,
 
                 // 动效：顶栏滚动态 / 首页动态播报 / 地图热推城市
                 scrolled: false,
@@ -5803,8 +6492,12 @@
                 cities: ['北京', '上海', '广州', '深圳', '杭州', '南京', '成都', '重庆', '武汉', '西安', '郑州', '长沙', '天津', '青岛', '大连', '厦门', '昆明', '三亚', '桂林', '丽江', '东京', '首尔', '曼谷', '新加坡', '巴厘岛', '迪拜', '巴黎', '伦敦', '罗马', '悉尼', '纽约', '洛杉矶', '夏威夷', '里约热内卢', '开罗', '开普敦', '莫斯科', '奥克兰', '温哥华'],
 
                 // 酒店
-                hotelForm: { city: '北京', checkIn: '', checkOut: '', keyword: '' },
+                hotelForm: { city: '北京', checkIn: '', checkOut: '', keyword: '', rooms: 1, adults: 2, children: 0 },
                 hotels: [],
+                // 酒店结果排序筛选：推荐/好评/价格/距离 + 星级档位 + 价格区间
+                hotelSort: 'reco',
+                hotelStar: 0,
+                hotelPriceBand: '',
 
                 // 门票·活动
                 ticketForm: { city: '北京', date: '', keyword: '' },
@@ -5815,10 +6508,15 @@
                 // 车票
                 trainForm: { from: '北京', to: '上海', date: '' },
                 trains: [],
+                // 车次排序筛选：出发时间/耗时/价格 + 只看高铁动车/只看有票
+                trainSort: 'dep',
+                trainOnlyGD: false,
+                trainOnlyAvail: false,
 
                 // 机票
                 flightForm: { from: '北京', to: '上海', date: '' },
                 flights: [],
+                flightSort: 'dep',
                 flightScope: 'domestic', // domestic 国内 / international 国际 / hmt 中国港澳台
                 FLIGHT_SCOPES: [
                     { key: 'domestic', name: '国内', icon: 'fa-flag', datalist: 'flight-city-domestic', from: '北京', to: '上海', tip: '国内航线 · 凭身份证购票，支持在线值机与电子登机牌' },
@@ -6876,6 +7574,97 @@
                 priceVisible() {
                     return !!this.currentUser;
                 },
+                // ==================== 携程式搜索体验：历史 / 筛选排序 / 日期条 ====================
+                moduleHistory() {
+                    return this.searchHistory[this.searchTab] || [];
+                },
+                // 吸顶搜索条的精简信息：当前模块的路线/日期/人数，浏览结果时条件一眼可见
+                miniInfo() {
+                    const t = this.searchTab;
+                    const dsub = d => cpLabel(d) + ' ' + (cpTag(d) || cpWeekOf(d));
+                    if (t === 'hotel') {
+                        const f = this.hotelForm;
+                        return {
+                            icon: 'fa-hotel', title: (f.city || '目的地') + '酒店',
+                            sub: cpShort(f.checkIn) + ' 至 ' + cpShort(f.checkOut) + ' · ' + f.rooms + '间' + (f.adults + f.children) + '人' + (f.keyword ? ' · ' + f.keyword : ''),
+                            count: this.hotels.length ? '共 ' + this.filteredHotels.length + ' 家' : ''
+                        };
+                    }
+                    if (t === 'ticket') {
+                        const f = this.ticketForm;
+                        return { icon: 'fa-ticket', title: (f.city || '目的地') + '门票', sub: dsub(f.date), count: this.tickets.length ? '共 ' + this.tickets.length + ' 个景点' : '' };
+                    }
+                    const map = {
+                        train: { icon: 'fa-train', form: this.trainForm, list: this.trains, unit: ' 个车次' },
+                        flight: { icon: 'fa-plane', form: this.flightForm, list: this.flights, unit: ' 个航班' },
+                        bus: { icon: 'fa-bus', form: this.busForm, list: this.buses, unit: ' 个班次' },
+                        ship: { icon: 'fa-ship', form: this.shipForm, list: this.ships, unit: ' 个班次' }
+                    };
+                    const m = map[t];
+                    if (!m) return { icon: 'fa-search', title: '', sub: '', count: '' };
+                    return { icon: m.icon, title: m.form.from + ' → ' + m.form.to, sub: dsub(m.form.date), count: m.list.length ? '共 ' + m.list.length + m.unit : '' };
+                },
+                // 关键词联想：酒店名 + 商圈/位置，与 generateHotels 的过滤字段完全一致，点了必有结果
+                kwSuggestions() {
+                    const city = this.hotelForm.city;
+                    if (!city) return [];
+                    const q = (this.hotelForm.keyword || '').trim();
+                    const preset = this.realHotels[city] || [];
+                    const seen = {};
+                    const spots = [];
+                    preset.forEach(h => { if (h.area && !seen[h.area]) { seen[h.area] = 1; spots.push({ name: h.area, type: '位置' }); } });
+                    ['市中心', '火车站商圈', '滨江新区', '高新区', '老城区'].forEach(a => { if (!seen[a]) { seen[a] = 1; spots.push({ name: a, type: '位置' }); } });
+                    const hotels = preset.map(h => ({ name: h.name, type: '酒店' }));
+                    const pool = q ? hotels.concat(spots).filter(x => x.name.indexOf(q) >= 0) : spots.slice(0, 5).concat(hotels.slice(0, 3));
+                    return pool.slice(0, 8);
+                },
+                hotelFilterActive() {
+                    return this.hotelSort !== 'reco' || !!this.hotelStar || !!this.hotelPriceBand;
+                },
+                // 酒店筛选 + 排序；未登录时价格类排序/区间自动失效（与 priceVisible 门禁一致）
+                filteredHotels() {
+                    let list = this.hotels.slice();
+                    if (this.hotelStar) {
+                        const band = this.hotelStar;
+                        list = list.filter(h => band === 5 ? h.stars >= 5 : band === 2 ? h.stars <= 2 : h.stars === band);
+                    }
+                    if (this.priceVisible && this.hotelPriceBand) {
+                        const parts = this.hotelPriceBand.split('-').map(Number);
+                        list = list.filter(h => h.basePrice >= parts[0] && (parts[1] ? h.basePrice < parts[1] : true));
+                    }
+                    let sort = this.hotelSort;
+                    if (!this.priceVisible && (sort === 'priceAsc' || sort === 'priceDesc')) sort = 'reco';
+                    if (sort === 'score') list.sort((a, b) => b.score - a.score);
+                    else if (sort === 'priceAsc') list.sort((a, b) => a.basePrice - b.basePrice);
+                    else if (sort === 'priceDesc') list.sort((a, b) => b.basePrice - a.basePrice);
+                    else if (sort === 'dist') list.sort((a, b) => a.distance - b.distance);
+                    return list;
+                },
+                filteredTrains() {
+                    let list = this.trains.slice();
+                    if (this.priceVisible) {
+                        if (this.trainOnlyGD) list = list.filter(t => /^[GDC]/.test(t.trainNo));
+                        if (this.trainOnlyAvail) list = list.filter(t => this.hasTrainSeats(t));
+                    }
+                    let sort = this.trainSort;
+                    if (!this.priceVisible && sort === 'price') sort = 'dep';
+                    const dep = t => +t.departureTime.split(':')[0] * 60 + +t.departureTime.split(':')[1];
+                    if (sort === 'dur') list.sort((a, b) => this.durToMin(a.duration) - this.durToMin(b.duration));
+                    else if (sort === 'price') list.sort((a, b) => this.trainMinPrice(a) - this.trainMinPrice(b));
+                    else list.sort((a, b) => dep(a) - dep(b));
+                    return list;
+                },
+                filteredFlights() {
+                    const list = this.flights.slice();
+                    let sort = this.flightSort;
+                    if (!this.priceVisible && sort === 'price') sort = 'dep';
+                    if (sort === 'dur') list.sort((a, b) => this.durToMin(a.duration) - this.durToMin(b.duration));
+                    else if (sort === 'price') list.sort((a, b) => this.flightMinPrice(a) - this.flightMinPrice(b));
+                    else list.sort((a, b) => a.depTime.localeCompare(b.depTime));
+                    return list;
+                },
+                trainDateStrip() { return this.buildDateStrip(this.trainForm.date); },
+                flightDateStrip() { return this.buildDateStrip(this.flightForm.date); },
                 // 登录/注册/找回面板的大标题：登录按方式变，不再挂那条「登录 / 注册 / 忘记密码」页签
                 authHeadTitle() {
                     if (this.authTab === 'register') return '注册新账号';
@@ -7156,6 +7945,123 @@
             today() {
                 return this.fmtDate(new Date());
             },
+                // ==================== 携程式搜索体验：历史 / 交换 / 日期条 / 筛选 ====================
+                // 记一条最近搜索（startSearch 统一调，校验不过不会写进去）
+                recordSearch() {
+                    const tab = this.searchTab;
+                    let label = '', payload = null;
+                    if (tab === 'hotel') {
+                        const f = this.hotelForm;
+                        label = f.city + ' · ' + f.checkIn.slice(5) + '至' + f.checkOut.slice(5) + ' · ' + f.rooms + '间' + f.adults + '人' + (f.children ? '+' + f.children + '童' : '') + (f.keyword.trim() ? ' · ' + f.keyword.trim() : '');
+                        payload = Object.assign({}, f);
+                    } else if (tab === 'ticket') {
+                        const f = this.ticketForm;
+                        label = f.city + ' · ' + (f.date || '').slice(5) + (f.keyword.trim() ? ' · ' + f.keyword.trim() : '');
+                        payload = Object.assign({}, f);
+                    } else if (tab === 'train' || tab === 'flight' || tab === 'bus' || tab === 'ship') {
+                        const f = this[tab + 'Form'];
+                        label = f.from + ' → ' + f.to + ' · ' + (f.date || '').slice(5);
+                        payload = Object.assign({}, f);
+                        if (tab === 'flight') { payload.scope = this.flightScope; label += ' · ' + this.flightScopeMeta.name; }
+                    } else if (tab === 'vacation' || tab === 'car') {
+                        const f = this[tab + 'Form'];
+                        label = f.city + ' · ' + (f.date || '').slice(5);
+                        payload = Object.assign({}, f);
+                    } else {
+                        return;
+                    }
+                    const list = (this.searchHistory[tab] || []).filter(h => h.label !== label);
+                    list.unshift({ label: label, payload: payload });
+                    this.$set(this.searchHistory, tab, list.slice(0, 6));
+                    try { localStorage.setItem('ctripSearchHistory', JSON.stringify(this.searchHistory)); } catch (e) { }
+                },
+
+                // 点历史条：把当时的表单条件回填进去直接重查
+                applyHistory(h) {
+                    const tab = this.searchTab;
+                    const p = h.payload || {};
+                    const formKey = { hotel: 'hotelForm', ticket: 'ticketForm', train: 'trainForm', flight: 'flightForm', bus: 'busForm', ship: 'shipForm', vacation: 'vacationForm', car: 'carForm' }[tab];
+                    if (!formKey) return;
+                    if (tab === 'flight') {
+                        if (p.scope) this.flightScope = p.scope;
+                        Object.assign(this.flightForm, { from: p.from, to: p.to, date: p.date });
+                    } else {
+                        Object.assign(this[formKey], p);
+                    }
+                    const run = { hotel: 'searchHotels', ticket: 'searchTickets', train: 'searchTrains', flight: 'searchFlights', bus: 'searchBuses', ship: 'searchShips', vacation: 'searchVacations', car: 'searchCars' }[tab];
+                    if (run) this[run]();
+                },
+
+                clearHistory() {
+                    this.$set(this.searchHistory, this.searchTab, []);
+                    try { localStorage.setItem('ctripSearchHistory', JSON.stringify(this.searchHistory)); } catch (e) { }
+                    this.showNotification('已清空本模块的搜索历史');
+                },
+
+                // 出发/到达一键交换（火车/机票/汽车/船票共用）
+                swapCities() {
+                    const f = this[this.searchTab + 'Form'];
+                    if (!f || !('from' in f)) return;
+                    const t = f.from;
+                    f.from = f.to;
+                    f.to = t;
+                    this.swapAnim = this.searchTab;
+                    setTimeout(() => { if (this.swapAnim === this.searchTab) this.swapAnim = ''; }, 450);
+                },
+
+                // 日期条：以当前查询日为中心前后各 3 天，不早于今天
+                buildDateStrip(date) {
+                    const t = this.today();
+                    const base = date || t;
+                    let start = cpAdd(base, -3);
+                    if (start < t) start = t;
+                    const days = [];
+                    for (let i = 0; i < 7; i++) {
+                        const d = cpAdd(start, i);
+                        days.push({ date: d, label: cpShort(d), week: cpTag(d) || cpWeekOf(d), active: d === base });
+                    }
+                    return days;
+                },
+
+                shiftSearchDate(tab, n) {
+                    const f = this[tab + 'Form'];
+                    const t = this.today();
+                    let d = cpAdd(f.date || t, n);
+                    if (d < t) d = t;
+                    if (d === f.date) return;
+                    f.date = d;
+                    this[tab === 'train' ? 'searchTrains' : 'searchFlights']();
+                },
+
+                pickStripDate(tab, d) {
+                    const f = this[tab + 'Form'];
+                    if (d === f.date) return;
+                    f.date = d;
+                    this[tab === 'train' ? 'searchTrains' : 'searchFlights']();
+                },
+
+                resetHotelFilters() {
+                    this.hotelSort = 'reco';
+                    this.hotelStar = 0;
+                    this.hotelPriceBand = '';
+                },
+
+                // 「X时Y分」→ 分钟数；排序用
+                durToMin(s) {
+                    const m = /(\d+)时(\d+)分/.exec(s || '');
+                    return m ? +m[1] * 60 + +m[2] : 0;
+                },
+
+                trainMinPrice(t) {
+                    const ps = (t.seats || []).filter(s => s && s.count > 0).map(s => s.price);
+                    return ps.length ? Math.min.apply(null, ps) : Infinity;
+                },
+
+                flightMinPrice(f) {
+                    const cs = f.cabins || [];
+                    return cs.length ? Math.min.apply(null, cs.map(c => c.price)) : Infinity;
+                },
+
                 // ==================== 首页 / 登录注册 ====================
                 goHome() {
                     this.hasSearched = false;
@@ -8140,6 +9046,7 @@
                 // ==================== 旅游（度假线路） ====================
                 searchVacations() {
                     if (!this.vacationForm.city) { this.showNotification('请输入目的地', true); return; }
+                    this.recordSearch();
                     this.isLoading = true;
                     this.hasSearched = true;
                     this.vacations = [];
@@ -8219,6 +9126,7 @@
                 // ==================== 用车（自驾租车） ====================
                 searchCars() {
                     if (!this.carForm.city) { this.showNotification('请输入取车城市', true); return; }
+                    this.recordSearch();
                     this.isLoading = true;
                     this.hasSearched = true;
                     this.cars = [];
@@ -9675,6 +10583,8 @@
                         return;
                     }
 
+                    // 新一轮查询重置筛选，避免上个城市的星级/价格条件把新结果筛成空
+                    this.resetHotelFilters();
                     this.startSearch();
                     this.searchOnServer(
                         `/hotels?city=${encodeURIComponent(this.hotelForm.city)}&keyword=${encodeURIComponent(this.hotelForm.keyword.trim())}`,
@@ -11014,6 +11924,7 @@
                 },
 
                 startSearch() {
+                    this.recordSearch();
                     this.isLoading = true;
                     this.hasSearched = true;
                     this.hotels = [];
@@ -11191,6 +12102,23 @@
 
                 onScroll() {
                     this.scrolled = window.scrollY > 8;
+                    // 吸顶精简搜索条：搜索卡整体滚过顶栏后才浮现，滚回表单即消失
+                    const el = this.$refs.searchCard;
+                    const tabs = ['hotel', 'ticket', 'train', 'flight', 'bus', 'ship'];
+                    this.miniShow = !!el && this.hasSearched && !this.moduleView && tabs.indexOf(this.searchTab) >= 0 && el.getBoundingClientRect().bottom < 76;
+                },
+
+                // 点吸顶条回到搜索卡修改条件
+                backToSearch() {
+                    const el = this.$refs.searchCard;
+                    if (!el) return;
+                    window.scrollTo({ top: window.scrollY + el.getBoundingClientRect().top - 70, behavior: 'smooth' });
+                },
+
+                // 关键词联想点选：回填并收起下拉
+                pickKw(s) {
+                    this.hotelForm.keyword = s.name;
+                    this.kwOpen = false;
                 },
 
                 tickDeal() {
@@ -11322,6 +12250,8 @@
                 // 顺序很关键：/api/orders 现在要求登录态，必须先恢复令牌再拉订单，
                 // 否则已登录用户刷新页面也会因无令牌而降级成本地订单
                 this.loadToolState();
+                // 恢复各模块最近搜索（隐私模式等读不到就当空，不影响主流程）
+                try { this.searchHistory = JSON.parse(localStorage.getItem('ctripSearchHistory') || '{}') || {}; } catch (e) { this.searchHistory = {}; }
                 // 协议勾选的本地记忆：只有存过 '1' 才预勾；从没点过（或存的是 '0'）都保持未勾，
                 // 免得一上来就是一个「已经替用户同意」的默认值
                 try { this.loginAgree = localStorage.getItem('ctripAuthAgree') === '1'; } catch (e) { }
@@ -11330,6 +12260,9 @@
 
                 // ESC 关闭弹窗
                 window.addEventListener('keydown', this.handleKeydown);
+                // 关键词联想下拉点外部关闭（与城市/日历面板同一套交互）
+                this.kwOutside = e => { if (this.kwOpen && !e.target.closest('.kw-wrap')) this.kwOpen = false; };
+                document.addEventListener('mousedown', this.kwOutside);
 
                 // 待支付倒计时：1 秒一跳，只驱动 nowTick（订单行与收银台的剩余时间都由它算出来）。
                 // 归零时后端定时任务才是最终裁决者，这里只是先把页面状态同步过来，避免用户看到「待支付 00:00」
@@ -11365,6 +12298,7 @@
             },
             beforeDestroy() {
                 window.removeEventListener('keydown', this.handleKeydown);
+                if (this.kwOutside) document.removeEventListener('mousedown', this.kwOutside);
                 if (this.payTickTimer) clearInterval(this.payTickTimer);
                 if (this.payVisibilityTick) document.removeEventListener('visibilitychange', this.payVisibilityTick);
                 this.stopQrLogin();
