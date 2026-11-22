@@ -38,8 +38,9 @@ public class ProductController {
     }
 
     @GetMapping("/flights")
-    public ApiResponse<List<Map<String, Object>>> flights(@RequestParam String from, @RequestParam String to) {
-        return ApiResponse.ok(service.searchFlights(from, to));
+    public ApiResponse<List<Map<String, Object>>> flights(@RequestParam String from, @RequestParam String to,
+                                                          @RequestParam(required = false) String date) {
+        return ApiResponse.ok(service.searchFlights(from, to, date));
     }
 
     @GetMapping("/buses")

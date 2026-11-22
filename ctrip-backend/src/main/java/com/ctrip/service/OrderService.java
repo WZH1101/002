@@ -135,12 +135,12 @@ public class OrderService {
         }
         if (qty < 1 || qty > 99) throw new IllegalStateException("数量需在 1-99 之间");
 
-        // 服务端计价 + 扣减库存（库存不足抛异常，事务回滚）
-        Map<String, Object> price = productService.priceAndDeduct(type, itemId, choice, qty, days);
+        // 服务端计价 + 扣减库存（库存不足抛异常，事务回滚）；机票经济舱要按出行日期算淡旺季
+        String dateText = str(req.getOrDefault("dateText", ""));
+        Map<String, Object> price = productService.priceAndDeduct(type, itemId, choice, qty, days, departDate(dateText));
 
         String orderNo = "C" + System.currentTimeMillis();
         String title = str(req.getOrDefault("title", choice));
-        String dateText = str(req.getOrDefault("dateText", ""));
         String key = idemKey == null || idemKey.isBlank() ? null : idemKey.trim();
         Timestamp deadline = Timestamp.from(Instant.now().plusSeconds(payDeadlineMinutes * 60L));
 
@@ -306,7 +306,8 @@ public class OrderService {
         String newDateText = (String) product.get("dateText");
 
         productService.restoreStock(type, oldItemId, oldChoice, qty);
-        Map<String, Object> price = productService.priceAndDeduct(type, newItemId, choice, qty, 1);
+        // 新日期可能落在旺季/淡季，机票经济舱按同一个公式重算
+        Map<String, Object> price = productService.priceAndDeduct(type, newItemId, choice, qty, 1, date);
         double newUnit = ((Number) price.get("unitPrice")).doubleValue();
         double newTotal = ((Number) price.get("totalPrice")).doubleValue();
         double fee = changeFee(type, stringOf(row.get("date_text")), seq, oldTotal);
@@ -389,6 +390,14 @@ public class OrderService {
         Long hours = hoursToDeparture(oldDateText);
         if (hours == null) return 0;
         return hours > 24 ? 0 : Math.max(30, round2(oldTotal * 0.10));
+    }
+
+    /** 从 date_text（如「2026-11-22 08:30（北京首都→上海虹桥）」）里取出行日期；取不到返回 null */
+    private static String departDate(String dateText) {
+        if (dateText == null) return null;
+        Matcher m = DEP_TIME.matcher(dateText);
+        if (!m.find()) return null;
+        return m.group(1) + "-" + m.group(2) + "-" + m.group(3);
     }
 
     /** 距 date_text 里的出行时刻还有多少小时；解析不出返回 null */

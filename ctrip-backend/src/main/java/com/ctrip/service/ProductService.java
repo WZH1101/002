@@ -80,12 +80,12 @@ public class ProductService {
         return out;
     }
 
-    /** 火车票搜索：真实车次库（12306 口径），无数据线路按规律生成入库 */
+    /** 火车票搜索：真实车次库（12306 口径），线路不足目标密度时按规律补齐入库 */
     public List<Map<String, Object>> searchTrains(String from, String to) {
         List<Map<String, Object>> rows = query(
                 "SELECT * FROM train_ticket WHERE from_city = ? AND to_city = ? ORDER BY dep_time", from, to);
-        if (rows.isEmpty()) {
-            generateTrainsToDb(from, to);
+        if (rows.size() < Lookup.trainTargetFor(from, to)) {
+            generateTrainsToDb(from, to, rows);
             rows = query("SELECT * FROM train_ticket WHERE from_city = ? AND to_city = ? ORDER BY dep_time", from, to);
         }
         List<Map<String, Object>> out = new ArrayList<>();
@@ -105,12 +105,12 @@ public class ProductService {
         return out;
     }
 
-    /** 机票搜索 */
-    public List<Map<String, Object>> searchFlights(String from, String to) {
+    /** 机票搜索：线路不足目标密度时按规律补齐入库；date 只影响经济舱的淡旺季展示价 */
+    public List<Map<String, Object>> searchFlights(String from, String to, String date) {
         List<Map<String, Object>> rows = query(
                 "SELECT * FROM flight WHERE from_city = ? AND to_city = ? ORDER BY dep_time", from, to);
-        if (rows.isEmpty()) {
-            generateFlightsToDb(from, to);
+        if (rows.size() < Lookup.flightTargetFor(from, to)) {
+            generateFlightsToDb(from, to, rows);
             rows = query("SELECT * FROM flight WHERE from_city = ? AND to_city = ? ORDER BY dep_time", from, to);
         }
         List<Map<String, Object>> out = new ArrayList<>();
@@ -125,7 +125,9 @@ public class ProductService {
             f.put("depTime", row.get("dep_time"));
             f.put("arrTime", row.get("arr_time"));
             f.put("duration", row.get("duration"));
-            f.put("cabins", parseList(row.get("cabins")));
+            List<Map<String, Object>> cabins = objectList(row.get("cabins"));
+            for (Map<String, Object> c : cabins) c.put("price", flightUnitPrice(c, date));
+            f.put("cabins", cabins);
             out.add(f);
         }
         return out;
@@ -270,9 +272,10 @@ public class ProductService {
 
     /**
      * 根据服务端数据计算单价/总价并扣减库存。
+     * date（yyyy-MM-dd）只对机票起作用：经济舱按淡旺季系数浮动，与搜索展示用同一个公式。
      * 返回 {unitPrice, totalPrice}；库存不足抛 IllegalStateException
      */
-    public Map<String, Object> priceAndDeduct(String type, long itemId, String choice, int qty, int days) {
+    public Map<String, Object> priceAndDeduct(String type, long itemId, String choice, int qty, int days, String date) {
         ThreadLocalRandom rnd = ThreadLocalRandom.current();
         switch (type) {
             case "hotel" -> {
@@ -312,7 +315,7 @@ public class ProductService {
                 List<Map<String, Object>> cabins = parse(json);
                 Map<String, Object> cabin = findByName(cabins, choice);
                 if (cabin == null) throw new IllegalStateException("该舱位不可预订");
-                double unit = dbl(cabin.get("price"));
+                double unit = flightUnitPrice(cabin, date);
                 int count = (int) dbl(cabin.getOrDefault("count", 0));
                 if (count < qty) throw new IllegalStateException("剩余票数不足（当前仅剩 " + count + " 张）");
                 cabin.put("count", count - qty);
@@ -458,52 +461,67 @@ public class ProductService {
         }
     }
 
-    /** 按 12306 规律生成一条线路的车次并入库（G/D/Z/T/K 号段、平均旅速与真实一致） */
-    private void generateTrainsToDb(String from, String to) {
+    /** 按 12306 规律补齐一条线路的车次并入库（密度按线路等级、号段按走廊、时段按车型） */
+    private void generateTrainsToDb(String from, String to, List<Map<String, Object>> existing) {
         int dist = Lookup.distance(from, to);
+        // 目标密度：枢纽/走廊 18-42 班，支线 3-6 班；已达标不再补
+        int need = Lookup.trainTargetFor(from, to) - existing.size();
+        if (need <= 0) return;
         ThreadLocalRandom rnd = ThreadLocalRandom.current();
-        int total = rnd.nextInt(10, 13);
-        for (int i = 0; i < total; i++) {
-            double roll = rnd.nextDouble();
-            String type = roll < 0.5 ? "G" : (roll < 0.72 ? "D" : (roll < 0.86 ? "Z" : (roll < 0.93 ? "T" : "K")));
-            String trainNo = switch (type) {
-                case "G" -> "G" + rnd.nextInt(101, 2501);
-                case "D" -> "D" + rnd.nextInt(1000, 7000);
-                case "Z" -> "Z" + rnd.nextInt(1, 299);
-                case "T" -> "T" + rnd.nextInt(1, 299);
-                default -> "K" + rnd.nextInt(100, 1300);
-            };
-            int durMin = Lookup.trainMinutes(dist, type, from, to, rnd.nextDouble());
-            int depMin = 6 * 60 + rnd.nextInt(17 * 60);
+        boolean hsr = Lookup.onHsrCorridor(from, to);
+        int corridor = Lookup.railCorridorIndex(from, to);
+        Set<String> used = new HashSet<>();
+        for (Map<String, Object> r : existing) used.add(String.valueOf(r.get("train_no")));
+        Set<String> usedDep = new HashSet<>();
+        for (Map<String, Object> r : existing) usedDep.add(String.valueOf(r.get("dep_time")));
+        for (int i = 0; i < need; i++) {
+            // 车型结构：短途以 G/D 为主，长途普速占比上升；边疆支线只能是普速
+            boolean remote = Lookup.isRemote(from) || Lookup.isRemote(to);
+            String type = Lookup.pickTrainType(dist, hsr, rnd.nextDouble(), remote);
+            String trainNo = Lookup.trainNumber(type, dist, corridor, rnd, used);
+            // 同一档位同时决定停站密度与发车时刻：标杆车跑得快，也优先排整点/半点
+            double tierRoll = rnd.nextDouble();
+            int durMin = Lookup.trainMinutes(dist, type, from, to, tierRoll);
+            int depMin = Lookup.trainDepMinute(type, dist, rnd, tierRoll);
+            // 同一刻发三班同区间不像官网：同刻就重抽（预置车次照旧保留）
+            for (int k = 0; k < 4 && usedDep.contains(fmtHm(depMin)); k++) {
+                depMin = Lookup.trainDepMinute(type, dist, rnd, tierRoll);
+            }
+            usedDep.add(fmtHm(depMin));
             int arrTotal = depMin + durMin;
             int dayOffset = arrTotal / 1440;
             String dep = fmtHm(depMin);
             String arr = dayTag(dayOffset) + fmtHm(arrTotal % 1440);
             Map<String, Double> prices = calcPrices(type, dist, false, from + "-" + to);
             List<Map<String, Object>> seats = buildSeats(type, prices, false, rnd);
-            insertTrain(from, to, trainNo, type, dep, arr, durText(durMin), seats);
+            // 同城多站：G/D 走高铁场，Z/T/K/P 走普速场（北京→上海 会有北京南/北京、上海虹桥/上海）
+            String fromStation = Lookup.stationFor(from, type, trainNo + "|f");
+            String toStation = Lookup.stationFor(to, type, trainNo + "|t");
+            insertTrain(from, to, trainNo, type, fromStation, toStation, dep, arr, durText(durMin), seats);
         }
     }
 
-    /** 按航司/机型/折扣规律生成航班并入库 */
-    private void generateFlightsToDb(String from, String to) {
-        String[][] airlines = {{"CA", "中国国航"}, {"MU", "东方航空"}, {"CZ", "南方航空"}, {"HU", "海南航空"},
-                {"HO", "吉祥航空"}, {"ZH", "深圳航空"}, {"MF", "厦门航空"}, {"SC", "山东航空"}};
-        String[] planes = {"A320", "A320neo", "A321", "A330-300", "A350-900", "B737-800", "B787-9"};
-        ThreadLocalRandom rnd = ThreadLocalRandom.current();
+    /** 按航班密度/航司归属/号段/机型/时段规律补齐航班并入库（与前端同源） */
+    private void generateFlightsToDb(String from, String to, List<Map<String, Object>> existing) {
         int rail = Lookup.distance(from, to);
         int dist = (int) Math.round(rail * 0.85);
         int durMin = Lookup.flightMinutes(dist);
-        int count = rnd.nextInt(6, 10);
+        // 目标密度：京沪 22-30 班、支线 2-4 班；已达标不再补
+        int need = Lookup.flightTargetFor(from, to) - existing.size();
+        if (need <= 0) return;
+        ThreadLocalRandom rnd = ThreadLocalRandom.current();
         Integer fullFare = Lookup.FULL_FARES.get(from + "-" + to);
-        for (int i = 0; i < count; i++) {
-            String[] al = airlines[rnd.nextInt(airlines.length)];
-            String plane = planes[rnd.nextInt(planes.length)];
-            int depMin = 6 * 60 + rnd.nextInt(15 * 60);
+        Set<String> used = new HashSet<>();
+        for (Map<String, Object> r : existing) used.add(String.valueOf(r.get("flight_no")));
+        for (int i = 0; i < need; i++) {
+            // 航司归属：始发地/目的地基地航司为主，其余均摊
+            String[] al = Lookup.carrierFor(from, to, rnd);
+            String plane = Lookup.planeFor(dist, rnd);
+            int depMin = Lookup.flightDepMinute(rnd);
             int arrTotal = depMin + durMin;
             List<Map<String, Object>> cabins = buildCabins(
                     fullFare != null ? fullFare : (int) Math.round((dist * 1.25 + 150) / 10.0) * 10, plane, rnd);
-            insertFlight(from, to, al[0] + rnd.nextInt(1000, 9000), al[1], plane,
+            insertFlight(from, to, Lookup.flightNumber(al[0], rnd, used), al[1], plane,
                     fmtHm(depMin), dayTag(arrTotal / 1440) + fmtHm(arrTotal % 1440), durText(durMin), cabins);
         }
     }
@@ -634,8 +652,18 @@ public class ProductService {
         return seats;
     }
 
+    /**
+     * 机票单价：库里的 cabins 存的是基准折扣价，经济舱再按出发日期叠淡旺季系数（与前端 seasonFactor 同源）。
+     * 搜索展示与下单结算都走这里，保证「看到的价格 = 付出的价格」；公务舱/头等舱按全价舱位，不随季节浮动。
+     */
+    static double flightUnitPrice(Map<String, Object> cabin, String date) {
+        double base = dbl(cabin.get("price"));
+        if (date == null || date.isBlank() || !"经济舱".equals(String.valueOf(cabin.get("name")))) return base;
+        return Math.round(base * Lookup.seasonFactor(date) / 10.0) * 10;
+    }
+
     List<Map<String, Object>> buildCabins(int fullFare, String plane, ThreadLocalRandom rnd) {
-        double discount = 0.28 + rnd.nextDouble() * 0.55; // 经济舱 2.8-8.3 折（官网常见折扣区间）
+        double discount = 0.28 + rnd.nextDouble() * 0.55; // 经济舱 2.8-8.3 折（官网常见折扣区间，淡旺季另算）
         int eco = (int) Math.round(fullFare * discount / 10.0) * 10;
         boolean hasFirst = plane.startsWith("A330") || plane.startsWith("A350")
                 || plane.startsWith("B777") || plane.startsWith("B787");
@@ -678,10 +706,12 @@ public class ProductService {
                 city, name, level, score, openTime, area, toJson(tags), price, toJson(types));
     }
 
-    private void insertTrain(String from, String to, String trainNo, String type, String dep, String arr,
-                             String duration, List<Map<String, Object>> seats) {
+    private void insertTrain(String from, String to, String trainNo, String type, String fromStation, String toStation,
+                             String dep, String arr, String duration, List<Map<String, Object>> seats) {
         jdbc.update("INSERT INTO train_ticket(from_city,to_city,train_no,type_code,type_name,from_station,to_station,dep_time,arr_time,duration,seats) VALUES(?,?,?,?,?,?,?,?,?,?,?)",
-                from, to, trainNo, type, Lookup.TYPE_NAMES.get(type), Lookup.station(from), Lookup.station(to),
+                from, to, trainNo, type, Lookup.TYPE_NAMES.get(type),
+                fromStation == null ? Lookup.station(from) : fromStation,
+                toStation == null ? Lookup.station(to) : toStation,
                 dep, arr, duration, toJson(seats));
     }
 
@@ -759,6 +789,16 @@ public class ProductService {
             return mapper.readValue(String.valueOf(json), Object.class);
         } catch (Exception e) {
             return List.of();
+        }
+    }
+
+    /** JSON 列 → 对象数组（结构确定的列：cabins/seats/rooms），容错为不拿数据 */
+    private List<Map<String, Object>> objectList(Object json) {
+        if (json == null) return new ArrayList<>();
+        try {
+            return mapper.readValue(String.valueOf(json), new TypeReference<>() {});
+        } catch (Exception e) {
+            return new ArrayList<>();
         }
     }
 
